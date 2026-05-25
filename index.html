@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Threads 戀愛話題監測</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; background:#f5f5f5; color:#333; }
+.header { background:linear-gradient(135deg,#e74c3c,#fd79a8); color:#fff; padding:1.5rem 1rem; text-align:center; }
+.header h1 { font-size:1.6rem; margin-bottom:0.3rem; }
+.header .meta { font-size:0.85rem; opacity:.85; }
+.tabs { display:flex; background:#fff; border-bottom:2px solid #e0e0e0; position:sticky; top:0; z-index:10; overflow-x:auto; }
+.tab { flex:1; min-width:80px; padding:0.8rem 0.5rem; text-align:center; cursor:pointer; font-size:0.85rem; color:#666; border-bottom:3px solid transparent; transition:all .2s; white-space:nowrap; }
+.tab:hover { background:#fef9f9; }
+.tab.active { color:#e74c3c; border-bottom-color:#e74c3c; font-weight:600; }
+.content { max-width:960px; margin:0 auto; padding:1rem; }
+.page { display:none; }
+.page.active { display:block; }
+.metrics { display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:0.8rem; margin-bottom:1.5rem; }
+.metric-card { background:#fff; border-radius:10px; padding:1rem; text-align:center; box-shadow:0 1px 3px rgba(0,0,0,.08); }
+.metric-value { font-size:1.5rem; font-weight:700; color:#e74c3c; }
+.metric-label { font-size:0.75rem; color:#999; margin-top:0.2rem; }
+.chart-container { background:#fff; border-radius:10px; padding:1rem; margin-bottom:1rem; box-shadow:0 1px 3px rgba(0,0,0,.08); }
+.chart-container h3 { font-size:0.95rem; color:#555; margin-bottom:0.5rem; }
+.charts-row { display:grid; grid-template-columns:1fr 1fr; gap:1rem; }
+@media(max-width:640px){ .charts-row { grid-template-columns:1fr; } }
+.topic-card { background:#fff; border-radius:10px; padding:1rem; margin-bottom:0.8rem; box-shadow:0 1px 3px rgba(0,0,0,.08); }
+.topic-title { font-weight:600; color:#e74c3c; margin-bottom:0.3rem; font-size:1rem; }
+.topic-meta { font-size:0.8rem; color:#999; margin-bottom:0.5rem; }
+.topic-summary { font-size:0.9rem; line-height:1.6; color:#444; padding:0.5rem; background:#fef9f9; border-radius:8px; border-left:3px solid #fd79a8; }
+.post-card { background:#fff; border-radius:8px; padding:0.8rem; margin-bottom:0.6rem; box-shadow:0 1px 2px rgba(0,0,0,.06); }
+.post-card h4 { font-size:0.9rem; margin-bottom:0.2rem; }
+.post-card .meta { font-size:0.75rem; color:#999; }
+.post-card .text { font-size:0.85rem; color:#333; margin:0.3rem 0; white-space:pre-wrap; max-height:4em; overflow:hidden; cursor:pointer; }
+.post-card .text.expanded { max-height:none; }
+.post-card .stats { font-size:0.8rem; color:#e74c3c; }
+.detail-container { background:#fff; border-radius:10px; padding:1rem; box-shadow:0 1px 3px rgba(0,0,0,.08); }
+.detail-container .text { white-space:pre-wrap; font-size:0.95rem; line-height:1.6; margin:0.8rem 0; }
+.comment { background:#f5f5f5; border-radius:6px; padding:0.5rem 0.8rem; margin:0.3rem 0; font-size:0.85rem; }
+.comment-author { font-weight:600; color:#e74c3c; font-size:0.8rem; }
+.post-select { width:100%; padding:0.5rem; border:1px solid #ddd; border-radius:6px; margin-bottom:1rem; font-size:0.9rem; }
+.filters { display:flex; gap:0.5rem; flex-wrap:wrap; margin-bottom:1rem; }
+.filter-btn { padding:0.3rem 0.8rem; border:1px solid #ddd; border-radius:20px; background:#fff; cursor:pointer; font-size:0.8rem; color:#666; }
+.filter-btn.active { background:#e74c3c; color:#fff; border-color:#e74c3c; }
+.filter-btn:hover { background:#fef9f9; }
+.footer { text-align:center; color:#999; font-size:0.75rem; padding:2rem 0; }
+</style>
+</head>
+<body>
+<div class="header">
+<h1>&#128149; Threads 戀愛話題熱門貼文監測</h1>
+<div class="meta">更新時間：2026-05-23 16:27:24 &middot; 資料來源：Threads.net</div>
+</div>
+
+<div class="tabs" id="tabs">
+<div class="tab active" data-tab="overview">&#128202; 總覽</div>
+<div class="tab" data-tab="topics">&#128218; 主題分群</div>
+<div class="tab" data-tab="posts">&#128196; 貼文列表</div>
+<div class="tab" data-tab="detail">&#128269; 貼文詳情</div>
+</div>
+
+<div class="content">
+<div class="page active" id="page-overview">
+<div class="metrics">
+<div class="metric-card"><div class="metric-value">20</div><div class="metric-label">&#128202; 貼文總數</div></div>
+<div class="metric-card"><div class="metric-value">1,028,600</div><div class="metric-label">&#10084; 總讚數</div></div>
+<div class="metric-card"><div class="metric-value">40,913</div><div class="metric-label">&#128172; 總留言數</div></div>
+<div class="metric-card"><div class="metric-value">51,430</div><div class="metric-label">&#11088; 平均讚數</div></div>
+</div>
+<div class="charts-row">
+<div class="chart-container"><h3>&#127921; 主題分佈</h3><canvas id="pieChart"></canvas></div>
+<div class="chart-container"><h3>&#128200; 讚數排行</h3><canvas id="barChart"></canvas></div>
+</div>
+</div>
+
+<div class="page" id="page-topics">
+<div id="topicContainer"></div>
+</div>
+
+<div class="page" id="page-posts">
+<div class="filters" id="filterContainer"></div>
+<div id="postListContainer"></div>
+</div>
+
+<div class="page" id="page-detail">
+<select class="post-select" id="postSelect"></select>
+<div id="detailContainer"></div>
+</div>
+</div>
+
+<div class="footer">Threads 戀愛話題監測工具 &middot; 每日 09:00 自動更新</div>
+
+<script>
+const DATA = {
+  posts: [{"id": "thread_20260523_011", "author": "情侶日常崩潰", "handle": "couple_daily", "date": "2026-05-23 06:18", "timestamp": 1779488304, "text": "我終於跟我暗戀兩年的學長告白了！！！\n\n結局：他說他也要跟我說一件事，然後他就親了我🥹\n\n我們在一起了！！！！！\n\n原來雙向暗戀是真的存在的😭😭😭\n\n大家加油！勇敢告白吧！\n\n#告白成功 #雙向暗戀 #愛情小確幸", "likes": 98700, "replies": 3200, "url": "https://www.threads.net/@couple_daily/post/8347935476603164068", "category_hint": "案例分享", "top_comments": [{"author": "用戶1994", "text": "求卡牌連結！在哪裡買？", "likes": 487, "time_ago": "11小時前"}, {"author": "用戶6012", "text": "好羨慕喔 我也想要這樣的感情", "likes": 1580, "time_ago": "12小時前"}, {"author": "用戶6701", "text": "感同身受⋯⋯我家的也是這樣", "likes": 673, "time_ago": "5小時前"}, {"author": "用戶5890", "text": "所以結論是什麼啦XD", "likes": 1009, "time_ago": "8小時前"}, {"author": "用戶3350", "text": "完全認同！我也是這樣想的🙋", "likes": 787, "time_ago": "2小時前"}], "category": "案例分享"}, {"id": "thread_20260523_002", "author": "感情觀察家", "handle": "relationship_watcher", "date": "2026-05-23 09:14", "timestamp": 1779498864, "text": "男友的「我沒事」翻譯機 🤯\n\n他說「沒事」= 有事但不想講\n他說「隨便妳」= 其實有想法但怕吵架\n他說「妳決定就好」= 到時候出錯都妳扛\n他說「我在聽」= 剛剛在放空\n他說「我錯了」= 我不知道錯在哪但先道歉再說\n\n還有什麼要補充的？🤣\n\n#男友語錄 #情侶日常 #懂的就懂", "likes": 92300, "replies": 5600, "url": "https://www.threads.net/@relationship_watcher/post/2921269129172117733", "category_hint": "幽默梗", "top_comments": [{"author": "用戶6439", "text": "但也要看雙方能不能互相理解吧", "likes": 1332, "time_ago": "9小時前"}, {"author": "用戶3029", "text": "這根本在說我男友😂", "likes": 1919, "time_ago": "11小時前"}, {"author": "用戶8894", "text": "求卡牌連結！在哪裡買？", "likes": 1697, "time_ago": "8小時前"}, {"author": "用戶5345", "text": "你脾氣也太好 我早翻桌了", "likes": 228, "time_ago": "2小時前"}, {"author": "用戶5439", "text": "等你交往久了就知道了⋯⋯", "likes": 696, "time_ago": "2小時前"}], "category": "幽默梗"}, {"id": "thread_20260523_020", "author": "心理師艾蜜莉", "handle": "emily_psy", "date": "2026-05-20 19:50", "timestamp": 1779277824, "text": "如何辨識渣男的 7 個特徵 🚩\n\n1. 認識第一天就說你特別\n2. 從不公開你們的關係\n3. 訊息永遠回很慢但ig在線\n4. 約會總是臨時約\n5. 說「我還沒準備好進入關係」\n6. 他的朋友你不知道\n7. 對你的稱呼永遠是「寶貝」而不是名字\n\n中三個以上請直接放生🙏\n\n#渣男 #戀愛警訊 #女生必看", "likes": 84500, "replies": 4200, "url": "https://www.threads.net/@emily_psy/post/2629815289954637036", "category_hint": "工具推薦", "top_comments": [{"author": "用戶6814", "text": "已收藏！感謝分享❤️", "likes": 636, "time_ago": "6小時前"}, {"author": "用戶2087", "text": "不同意耶，每對情侶狀況不一樣吧", "likes": 890, "time_ago": "7小時前"}, {"author": "用戶9969", "text": "求後續！！！！", "likes": 1920, "time_ago": "10小時前"}, {"author": "用戶2279", "text": "這什麼求生慾笑爛🤣", "likes": 80, "time_ago": "11小時前"}, {"author": "用戶3589", "text": "感同身受⋯⋯我家的也是這樣", "likes": 223, "time_ago": "10小時前"}], "category": "工具推薦"}, {"id": "thread_20260523_005", "author": "心理師艾蜜莉", "handle": "emily_psy", "date": "2026-05-23 00:09", "timestamp": 1779466164, "text": "男友的 10 種生物分類 🧬\n\n1. 電動型：打電動時會進入異次元\n2. 吃貨型：約會永遠在想要吃什麼\n3. 木頭型：你生氣了他還問「你怎麼了」\n4. 黏人型：你去上廁所他都要跟\n5. 冷笑話型：講笑話只有自己會笑\n6. 運動型：約會行程是陪他健身\n7. 攝影型：約會十分鐘拍照兩小時\n8. 睡覺型：訊息永遠已讀\r\n\n你的是哪一種？🤣\n\n#男友品種 #情侶日常 #搞笑", "likes": 81400, "replies": 3400, "url": "https://www.threads.net/@emily_psy/post/7587514156322854520", "category_hint": "幽默梗", "top_comments": [{"author": "用戶6676", "text": "求後續！！！！", "likes": 782, "time_ago": "4小時前"}, {"author": "用戶5242", "text": "這根本在說我男友😂", "likes": 854, "time_ago": "8小時前"}, {"author": "用戶5011", "text": "你脾氣也太好 我早翻桌了", "likes": 1109, "time_ago": "2小時前"}, {"author": "用戶2701", "text": "感同身受⋯⋯我家的也是這樣", "likes": 1057, "time_ago": "5小時前"}, {"author": "用戶1064", "text": "好羨慕喔 我也想要這樣的感情", "likes": 1703, "time_ago": "7小時前"}], "category": "幽默梗"}, {"id": "thread_20260523_018", "author": "男友使用手冊", "handle": "bf_manual", "date": "2026-05-21 01:45", "timestamp": 1779299124, "text": "吵架吵到一半男友突然開始做家事⋯⋯\n\n我：你為什麼都不懂我在意的點！\n他：（默默去洗碗）\n我：你現在是在逃避問題嗎！\n他：（開始摺衣服）\n我：⋯⋯⋯⋯\n\n然後我就氣消了😅\n這是什麼求生欲啦笑死\n\n#情侶吵架 #男友求生欲 #搞笑", "likes": 73400, "replies": 2100, "url": "https://www.threads.net/@bf_manual/post/5295772620543582445", "category_hint": "幽默梗", "top_comments": [{"author": "用戶2929", "text": "我男友完全相反欸XD", "likes": 594, "time_ago": "12小時前"}, {"author": "用戶8748", "text": "重點是溝通啦 不是誰對誰錯", "likes": 572, "time_ago": "12小時前"}, {"author": "用戶9037", "text": "完全認同！我也是這樣想的🙋", "likes": 818, "time_ago": "8小時前"}, {"author": "用戶7908", "text": "求卡牌連結！在哪裡買？", "likes": 1779, "time_ago": "4小時前"}, {"author": "用戶6119", "text": "真的！說到我心坎裡了", "likes": 1214, "time_ago": "4小時前"}], "category": "幽默梗"}, {"id": "thread_20260523_017", "author": "感情觀察家", "handle": "relationship_watcher", "date": "2026-05-20 07:10", "timestamp": 1779232224, "text": "發現男友手機裡有交友軟體...\n\n交往三年，已經論及婚嫁。昨天借他手機查東西，不小心看到螢幕上跳出Tinder通知。\n\n我沒有偷看，但那一幕已經在腦海揮之不去。\n\n我該直接問他嗎？還是先觀察？\n\n真的好徬徨...\n\n#出軌 #感情問題 #怎麼辦", "likes": 67800, "replies": 4500, "url": "https://www.threads.net/@relationship_watcher/post/3113551103393091918", "category_hint": "求助請益", "top_comments": [{"author": "用戶5346", "text": "我覺得要看情況不能一概而論", "likes": 1942, "time_ago": "10小時前"}, {"author": "用戶4970", "text": "這什麼求生慾笑爛🤣", "likes": 750, "time_ago": "8小時前"}, {"author": "用戶2799", "text": "等你交往久了就知道了⋯⋯", "likes": 526, "time_ago": "8小時前"}, {"author": "用戶4750", "text": "我也有經歷過 最後分手了😢", "likes": 1132, "time_ago": "9小時前"}, {"author": "用戶1469", "text": "你脾氣也太好 我早翻桌了", "likes": 1873, "time_ago": "3小時前"}], "category": "求助請益"}, {"id": "thread_20260523_014", "author": "感情諮商室", "handle": "love_counsel", "date": "2026-05-21 20:25", "timestamp": 1779366324, "text": "真心建議大家不要為了交往而改變自己原本的樣子。\n\n前陣子為了迎合喜歡的對象，把自己搞得面目全非，他不喜歡的東西我全部改掉，連朋友都說我像變了一個人。\n\n最後還是不適合，分手後我才發現我把自己弄丟了。\n\n先愛自己，再愛別人。\n\n#感情語錄 #戀愛建議", "likes": 56700, "replies": 890, "url": "https://www.threads.net/@love_counsel/post/9322781691660715334", "category_hint": "觀點爭論", "top_comments": [{"author": "用戶7677", "text": "好甜喔我要瞎了👓", "likes": 617, "time_ago": "1小時前"}, {"author": "用戶2681", "text": "所以結論是什麼啦XD", "likes": 1255, "time_ago": "11小時前"}, {"author": "用戶5085", "text": "我男友完全相反欸XD", "likes": 1556, "time_ago": "4小時前"}, {"author": "用戶8442", "text": "重點是溝通啦 不是誰對誰錯", "likes": 350, "time_ago": "6小時前"}, {"author": "用戶4860", "text": "感同身受⋯⋯我家的也是這樣", "likes": 124, "time_ago": "6小時前"}], "category": "觀點爭論"}, {"id": "thread_20260523_015", "author": "大學生戀愛", "handle": "college_love", "date": "2026-05-23 08:21", "timestamp": 1779495684, "text": "我男友昨天做了一件讓我很感動的事😭\n\n我最近工作壓力很大，每天回家都臭臉。昨天他默默煮了我最愛的麻辣鍋，還準備了我上次隨口說想喝的啤酒。\n\n吃完飯他把我抱在懷裡說：「辛苦了，不想說也沒關係，我在這邊。」\n\n當場直接噴淚😭😭😭\n\n有人也遇過這種暖男時刻嗎？\n\n#暖男 #男友 #情侶日常", "likes": 52300, "replies": 567, "url": "https://www.threads.net/@college_love/post/8370593569855122366", "category_hint": "案例分享", "top_comments": [{"author": "用戶3850", "text": "第一點就中了 該放生嗎QQ", "likes": 1275, "time_ago": "12小時前"}, {"author": "用戶5939", "text": "已收藏！感謝分享❤️", "likes": 865, "time_ago": "5小時前"}, {"author": "用戶7539", "text": "感同身受⋯⋯我家的也是這樣", "likes": 1414, "time_ago": "6小時前"}, {"author": "用戶4303", "text": "這篇必須讓另一半看到", "likes": 564, "time_ago": "6小時前"}, {"author": "用戶4421", "text": "但也要看雙方能不能互相理解吧", "likes": 771, "time_ago": "11小時前"}], "category": "案例分享"}, {"id": "thread_20260523_001", "author": "小美談戀愛", "handle": "love_xiaomei", "date": "2026-05-17 20:02", "timestamp": 1779019344, "text": "分享我跟男友從遠距離到同居的過程💕\n\n台北-高雄遠距離兩年，每個月見一次面。\n\n那段時間真的很辛苦，每次分開都像失戀一次。\n\n但也是那段時間讓我們更確定彼此就是要走下去的人。\n\n今年終於一起在台中定居了！\n\n遠距離的大家加油！撐過去就是你的！\n\n#遠距離戀愛 #同居生活 #愛情故事", "likes": 45600, "replies": 723, "url": "https://www.threads.net/@love_xiaomei/post/3964678404380645662", "category_hint": "案例分享", "top_comments": [{"author": "用戶8467", "text": "等你交往久了就知道了⋯⋯", "likes": 893, "time_ago": "4小時前"}, {"author": "用戶9699", "text": "完全認同！我也是這樣想的🙋", "likes": 1737, "time_ago": "2小時前"}, {"author": "用戶2622", "text": "好甜喔我要瞎了👓", "likes": 252, "time_ago": "1小時前"}, {"author": "用戶7309", "text": "已收藏！感謝分享❤️", "likes": 817, "time_ago": "12小時前"}, {"author": "用戶7181", "text": "不同意耶，每對情侶狀況不一樣吧", "likes": 702, "time_ago": "10小時前"}], "category": "案例分享"}, {"id": "thread_20260523_009", "author": "遠距離生存指南", "handle": "ldr_survival", "date": "2026-05-21 19:48", "timestamp": 1779364104, "text": "真的推薦每個情侶都去玩這個「伴侶對話卡牌」！\n\n上週和男友試了一整盒，原本以為會很尷尬，結果聊到凌晨三點。\n\n有些問題是平常根本不會聊到的深度話題，像是「你覺得我們之間的安全感來自哪裡？」「你最害怕失去我的哪個面向？」\n\n玩完之後感覺感情變更好了，大推！\n\n#伴侶溝通 #情侶遊戲 #好感度提升", "likes": 45200, "replies": 892, "url": "https://www.threads.net/@ldr_survival/post/7958300179765814430", "category_hint": "工具推薦", "top_comments": [{"author": "用戶3220", "text": "這什麼求生慾笑爛🤣", "likes": 1461, "time_ago": "1小時前"}, {"author": "用戶3258", "text": "這篇必須讓另一半看到", "likes": 1227, "time_ago": "5小時前"}, {"author": "用戶8910", "text": "完全認同！我也是這樣想的🙋", "likes": 1766, "time_ago": "10小時前"}, {"author": "用戶7876", "text": "我男友完全相反欸XD", "likes": 1079, "time_ago": "11小時前"}, {"author": "用戶2906", "text": "求後續！！！！", "likes": 1385, "time_ago": "9小時前"}], "category": "工具推薦"}, {"id": "thread_20260523_013", "author": "約會美食地圖", "handle": "date_food_map", "date": "2026-05-22 15:17", "timestamp": 1779434244, "text": "我該不該原諒男友騙我？\n\n他跟我說去加班，結果被我朋友看到在酒吧。事後他解釋是同事臨時約的，怕我生氣所以說謊。\n\n不是什麼嚴重的事，但信任感一旦有裂痕就很難修補。\n\n大家覺得這種小謊言可以原諒嗎？\n\n#感情問題 #信任 #情侶", "likes": 41200, "replies": 2800, "url": "https://www.threads.net/@date_food_map/post/4687678211833817229", "category_hint": "求助請益", "top_comments": [{"author": "用戶1746", "text": "這篇必須讓另一半看到", "likes": 2000, "time_ago": "6小時前"}, {"author": "用戶1874", "text": "第一點就中了 該放生嗎QQ", "likes": 1443, "time_ago": "3小時前"}, {"author": "用戶5798", "text": "真的！說到我心坎裡了", "likes": 1080, "time_ago": "4小時前"}, {"author": "用戶2291", "text": "已收藏！感謝分享❤️", "likes": 927, "time_ago": "1小時前"}, {"author": "用戶2723", "text": "笑死 太中肯了🤣", "likes": 1473, "time_ago": "7小時前"}], "category": "求助請益"}, {"id": "thread_20260523_003", "author": "男友使用手冊", "handle": "bf_manual", "date": "2026-05-21 02:09", "timestamp": 1779300564, "text": "大家覺得男生一定要有車才能交到女朋友嗎？\n\n我目前25歲，在台北工作，平時都搭捷運或ubike，生活圈也很方便，但一直被家人說沒車交不到女友。\n\n可是我自己也是女生，我反而覺得會開車沒什麼，重點是個性合不合吧？\n\n想聽聽大家的想法！\n\n#感情問題 #交往條件", "likes": 38700, "replies": 1240, "url": "https://www.threads.net/@bf_manual/post/8693110066444105547", "category_hint": "觀點爭論", "top_comments": [{"author": "用戶4343", "text": "重點是溝通啦 不是誰對誰錯", "likes": 1814, "time_ago": "2小時前"}, {"author": "用戶1496", "text": "感同身受⋯⋯我家的也是這樣", "likes": 234, "time_ago": "11小時前"}, {"author": "用戶5547", "text": "你脾氣也太好 我早翻桌了", "likes": 652, "time_ago": "7小時前"}, {"author": "用戶3369", "text": "原po加油！你不是一個人💪", "likes": 1668, "time_ago": "1小時前"}, {"author": "用戶9320", "text": "已收藏！感謝分享❤️", "likes": 1060, "time_ago": "5小時前"}], "category": "觀點爭論"}, {"id": "thread_20260523_010", "author": "曖昧讓人受委屈", "handle": "ambiguous_af", "date": "2026-05-19 13:24", "timestamp": 1779168264, "text": "遠距離戀愛維持的 5 個小技巧 ✨\n\n1. 每天固定時間視訊（不要只是打字）\n2. 一起看劇或玩遊戲（共享體驗）\n3. 寄實體信件或小禮物（驚喜感）\n4. 規劃下次見面的行程（期待感）\n5. 坦誠溝通不安和感受\n\n走過兩年遠距的我真心分享！\n\n#遠距離 #戀愛技巧 #經驗分享", "likes": 38700, "replies": 645, "url": "https://www.threads.net/@ambiguous_af/post/2311626740856278465", "category_hint": "工具推薦", "top_comments": [{"author": "用戶7782", "text": "我男友完全相反欸XD", "likes": 1937, "time_ago": "1小時前"}, {"author": "用戶4021", "text": "但也要看雙方能不能互相理解吧", "likes": 1610, "time_ago": "2小時前"}, {"author": "用戶1377", "text": "我也有經歷過 最後分手了😢", "likes": 1076, "time_ago": "8小時前"}, {"author": "用戶6838", "text": "原po加油！你不是一個人💪", "likes": 70, "time_ago": "12小時前"}, {"author": "用戶2823", "text": "這什麼求生慾笑爛🤣", "likes": 651, "time_ago": "10小時前"}], "category": "工具推薦"}, {"id": "thread_20260523_019", "author": "台北愛情故事", "handle": "taipei_love", "date": "2026-05-19 11:07", "timestamp": 1779160044, "text": "幫朋友問：發現男友跟女同事單獨吃宵夜，該生氣嗎？\n\n她男友說是同事剛好下班遇到，就一起去吃了。\n\n但女生覺得不太舒服，又怕自己太小氣。\n\n大家覺得這樣是正常的社交還是該注意？\n\n#感情問題 #情侶界線 #求助", "likes": 36800, "replies": 1900, "url": "https://www.threads.net/@taipei_love/post/2169503884202091009", "category_hint": "求助請益", "top_comments": [{"author": "用戶2717", "text": "等你交往久了就知道了⋯⋯", "likes": 60, "time_ago": "7小時前"}, {"author": "用戶3989", "text": "我也有經歷過 最後分手了😢", "likes": 408, "time_ago": "5小時前"}, {"author": "用戶9204", "text": "好羨慕喔 我也想要這樣的感情", "likes": 622, "time_ago": "3小時前"}, {"author": "用戶3586", "text": "重點是溝通啦 不是誰對誰錯", "likes": 341, "time_ago": "4小時前"}, {"author": "用戶1405", "text": "第一點就中了 該放生嗎QQ", "likes": 213, "time_ago": "7小時前"}], "category": "求助請益"}, {"id": "thread_20260523_016", "author": "小美談戀愛", "handle": "love_xiaomei", "date": "2026-05-21 10:15", "timestamp": 1779329724, "text": "只有我覺得情侶一定要每天聊天嗎？\n\n我朋友說他們情侶有時候一整天都不聯絡，但我覺得這樣很奇怪。\n\n我和男友就算再忙，至少睡前也會講個五分鐘電話或傳個訊息。\n\n每天聊天感情才會維持吧？還是大家覺得不用？\n\n#情侶日常 #感情觀念", "likes": 34500, "replies": 1800, "url": "https://www.threads.net/@love_xiaomei/post/1836990149910147535", "category_hint": "觀點爭論", "top_comments": [{"author": "用戶2542", "text": "感同身受⋯⋯我家的也是這樣", "likes": 218, "time_ago": "5小時前"}, {"author": "用戶8329", "text": "求後續！！！！", "likes": 1782, "time_ago": "12小時前"}, {"author": "用戶2752", "text": "這根本在說我男友😂", "likes": 155, "time_ago": "11小時前"}, {"author": "用戶8346", "text": "好羨慕喔 我也想要這樣的感情", "likes": 1774, "time_ago": "8小時前"}, {"author": "用戶5685", "text": "我覺得要看情況不能一概而論", "likes": 1781, "time_ago": "7小時前"}], "category": "觀點爭論"}, {"id": "thread_20260523_004", "author": "台北愛情故事", "handle": "taipei_love", "date": "2026-05-17 04:54", "timestamp": 1778964864, "text": "分享一下我的奇葩相親經驗😂\n\n對方一坐下來就問我月薪多少、有沒有房子、婚後要不要跟公婆住。\n\n我：我們可以先自我介紹一下嗎？\n他：那些不重要，先確認價值觀合不合。\n\n我心想我連你叫什麼名字都不知道欸大哥！\n\n#相親 #奇葩經驗 #單身萬歲", "likes": 34100, "replies": 1500, "url": "https://www.threads.net/@taipei_love/post/7381171155201470475", "category_hint": "抱怨", "top_comments": [{"author": "用戶2674", "text": "重點是溝通啦 不是誰對誰錯", "likes": 1960, "time_ago": "9小時前"}, {"author": "用戶8123", "text": "真的！說到我心坎裡了", "likes": 332, "time_ago": "11小時前"}, {"author": "用戶2360", "text": "感同身受⋯⋯我家的也是這樣", "likes": 254, "time_ago": "6小時前"}, {"author": "用戶2352", "text": "我覺得要看情況不能一概而論", "likes": 1768, "time_ago": "6小時前"}, {"author": "用戶1214", "text": "原po加油！你不是一個人💪", "likes": 1992, "time_ago": "12小時前"}], "category": "抱怨"}, {"id": "thread_20260523_006", "author": "戀愛廢片", "handle": "love_reels", "date": "2026-05-20 01:37", "timestamp": 1779212244, "text": "有人也覺得交往久了節日就不重要了嗎？\n\n和男友在一起五年，他去年忘記七夕，今年忘記情人節，還說「我們不需要用節日來證明感情」。\n\n雖然理性上知道他說的有道理，但感性上還是會失望⋯⋯\n\n是不是我太在意儀式感了？\n\n#節日儀式感 #情侶日常 #感情問題", "likes": 29100, "replies": 1300, "url": "https://www.threads.net/@love_reels/post/7835007048374420479", "category_hint": "抱怨", "top_comments": [{"author": "用戶1525", "text": "我覺得要看情況不能一概而論", "likes": 368, "time_ago": "1小時前"}, {"author": "用戶5096", "text": "求後續！！！！", "likes": 1511, "time_ago": "9小時前"}, {"author": "用戶2953", "text": "重點是溝通啦 不是誰對誰錯", "likes": 1917, "time_ago": "2小時前"}, {"author": "用戶5432", "text": "好羨慕喔 我也想要這樣的感情", "likes": 1372, "time_ago": "10小時前"}, {"author": "用戶7371", "text": "這根本在說我男友😂", "likes": 1302, "time_ago": "3小時前"}], "category": "抱怨"}, {"id": "thread_20260523_012", "author": "失戀陣線聯盟", "handle": "heartbreak_crew", "date": "2026-05-22 05:28", "timestamp": 1779398904, "text": "受不了男友每次打電動就消失\n\n已經講過好幾次了，每次說「再五分鐘」然後兩小時過去了。\n\n傳訊息不讀不回，打電話也不接，等他打完了才跑來說「寶貝我錯了」。\n\n我真的心好累，是不是所有男生都這樣？\n\n#抱怨男友 #電動廢人 #情侶吵架", "likes": 28900, "replies": 2100, "url": "https://www.threads.net/@heartbreak_crew/post/4773973049909965632", "category_hint": "抱怨", "top_comments": [{"author": "用戶3521", "text": "認真問 這樣算正常嗎？", "likes": 285, "time_ago": "12小時前"}, {"author": "用戶5077", "text": "你脾氣也太好 我早翻桌了", "likes": 1762, "time_ago": "3小時前"}, {"author": "用戶8283", "text": "所以結論是什麼啦XD", "likes": 1052, "time_ago": "7小時前"}, {"author": "用戶9441", "text": "感同身受⋯⋯我家的也是這樣", "likes": 169, "time_ago": "5小時前"}, {"author": "用戶3794", "text": "求後續！！！！", "likes": 1759, "time_ago": "12小時前"}], "category": "抱怨"}, {"id": "thread_20260523_007", "author": "暖男日記", "handle": "warm_boy_diary", "date": "2026-05-19 23:37", "timestamp": 1779205044, "text": "大家覺得伴侶之間應該要有共同興趣嗎？\n\n我和男友的興趣完全不同，我喜歡看展覽、看電影，他喜歡打球、打電動。\n\n有人說這樣互補比較好，有人說沒有共同話題很危險。\n\n我自己是覺得各自有空間也不錯啦，大家怎麼看？\n\n#感情討論 #情侶興趣", "likes": 25600, "replies": 1100, "url": "https://www.threads.net/@warm_boy_diary/post/8567621169220785117", "category_hint": "觀點爭論", "top_comments": [{"author": "用戶7857", "text": "我覺得要看情況不能一概而論", "likes": 534, "time_ago": "7小時前"}, {"author": "用戶2474", "text": "求後續！！！！", "likes": 1384, "time_ago": "6小時前"}, {"author": "用戶5129", "text": "這什麼求生慾笑爛🤣", "likes": 1853, "time_ago": "8小時前"}, {"author": "用戶2175", "text": "原po加油！你不是一個人💪", "likes": 732, "time_ago": "4小時前"}, {"author": "用戶8347", "text": "我也有經歷過 最後分手了😢", "likes": 583, "time_ago": "5小時前"}], "category": "觀點爭論"}, {"id": "thread_20260523_008", "author": "渣男辨識協會", "handle": "jerk_detector", "date": "2026-05-19 12:04", "timestamp": 1779163464, "text": "推薦情侶必看的 5 部 Netflix 影集 🎬\n\n1.《愛情白皮書》- 探討長期關係的保鮮\n2.《我們之間》- 遠距離戀愛的寫實\n3.《第一次》- 初戀的美好與苦澀\n4.《婚姻故事》- 雖然有點沈重但很真實\n5.《戀愛世代》- 經典日劇重溫\n\n每一部都適合情侶一起看，看完可以討論彼此的想法！\n\n#Netflix推薦 #情侶约会 #追劇", "likes": 23100, "replies": 456, "url": "https://www.threads.net/@jerk_detector/post/5468099875354590983", "category_hint": "工具推薦", "top_comments": [{"author": "用戶5989", "text": "笑死 太中肯了🤣", "likes": 939, "time_ago": "2小時前"}, {"author": "用戶5827", "text": "這篇必須讓另一半看到", "likes": 1645, "time_ago": "12小時前"}, {"author": "用戶6505", "text": "你脾氣也太好 我早翻桌了", "likes": 771, "time_ago": "12小時前"}, {"author": "用戶4019", "text": "認真問 這樣算正常嗎？", "likes": 1638, "time_ago": "12小時前"}, {"author": "用戶5951", "text": "完全認同！我也是這樣想的🙋", "likes": 831, "time_ago": "1小時前"}], "category": "工具推薦"}],
+  topicDistribution: {"工具推薦": 4, "幽默梗": 3, "抱怨": 3, "案例分享": 3, "求助請益": 3, "觀點爭論": 4},
+  topicSummaries: [{"topic": "工具推薦", "post_count": 4, "total_likes": 191500, "top_post": {"id": "thread_20260523_020", "author": "心理師艾蜜莉", "handle": "emily_psy", "date": "2026-05-20 19:50", "timestamp": 1779277824, "text": "如何辨識渣男的 7 個特徵 🚩\n\n1. 認識第一天就說你特別\n2. 從不公開你們的關係\n3. 訊息永遠回很慢但ig在線\n4. 約會總是臨時約\n5. 說「我還沒準備好進入關係」\n6. 他的朋友你不知道\n7. 對你的稱呼永遠是「寶貝」而不是名字\n\n中三個以上請直接放生🙏\n\n#渣男 #戀愛警訊 #女生必看", "likes": 84500, "replies": 4200, "url": "https://www.threads.net/@emily_psy/post/2629815289954637036", "category_hint": "工具推薦", "top_comments": [{"author": "用戶6814", "text": "已收藏！感謝分享❤️", "likes": 636, "time_ago": "6小時前"}, {"author": "用戶2087", "text": "不同意耶，每對情侶狀況不一樣吧", "likes": 890, "time_ago": "7小時前"}, {"author": "用戶9969", "text": "求後續！！！！", "likes": 1920, "time_ago": "10小時前"}, {"author": "用戶2279", "text": "這什麼求生慾笑爛🤣", "likes": 80, "time_ago": "11小時前"}, {"author": "用戶3589", "text": "感同身受⋯⋯我家的也是這樣", "likes": 223, "time_ago": "10小時前"}], "category": "工具推薦"}, "summary": "社群正在熱烈推薦各種戀愛相關的資源與工具。最受關注的推薦：「如何辨識渣男的 7 個特徵 🚩⋯」 其他熱門推薦：必看、推薦每個情侶都去玩這個「伴侶對話卡牌」！  上週和男友試了一、分享！  #遠距離 #戀愛技巧 #經驗分享 留言區使用者普遍給予正面回饋，認為這些資源實用且有幫助。"}, {"topic": "觀點爭論", "post_count": 4, "total_likes": 155500, "top_post": {"id": "thread_20260523_014", "author": "感情諮商室", "handle": "love_counsel", "date": "2026-05-21 20:25", "timestamp": 1779366324, "text": "真心建議大家不要為了交往而改變自己原本的樣子。\n\n前陣子為了迎合喜歡的對象，把自己搞得面目全非，他不喜歡的東西我全部改掉，連朋友都說我像變了一個人。\n\n最後還是不適合，分手後我才發現我把自己弄丟了。\n\n先愛自己，再愛別人。\n\n#感情語錄 #戀愛建議", "likes": 56700, "replies": 890, "url": "https://www.threads.net/@love_counsel/post/9322781691660715334", "category_hint": "觀點爭論", "top_comments": [{"author": "用戶7677", "text": "好甜喔我要瞎了👓", "likes": 617, "time_ago": "1小時前"}, {"author": "用戶2681", "text": "所以結論是什麼啦XD", "likes": 1255, "time_ago": "11小時前"}, {"author": "用戶5085", "text": "我男友完全相反欸XD", "likes": 1556, "time_ago": "4小時前"}, {"author": "用戶8442", "text": "重點是溝通啦 不是誰對誰錯", "likes": 350, "time_ago": "6小時前"}, {"author": "用戶4860", "text": "感同身受⋯⋯我家的也是這樣", "likes": 124, "time_ago": "6小時前"}], "category": "觀點爭論"}, "summary": "討論焦點圍繞「真心建議大家不要為了交往而改變自己原本的樣子。  前陣子為了迎合喜歡的對象，把自己搞得面目全非，他不⋯」，網友們對感情中的價值觀標準有明顯分歧。\n正反雙方各有論述，部分網友認為要看具體情況無法一概而論，另一派則有明確立場。\n整體討論理性且熱烈，反映這個話題在當代感情中的重要性。"}, {"topic": "案例分享", "post_count": 3, "total_likes": 196600, "top_post": {"id": "thread_20260523_011", "author": "情侶日常崩潰", "handle": "couple_daily", "date": "2026-05-23 06:18", "timestamp": 1779488304, "text": "我終於跟我暗戀兩年的學長告白了！！！\n\n結局：他說他也要跟我說一件事，然後他就親了我🥹\n\n我們在一起了！！！！！\n\n原來雙向暗戀是真的存在的😭😭😭\n\n大家加油！勇敢告白吧！\n\n#告白成功 #雙向暗戀 #愛情小確幸", "likes": 98700, "replies": 3200, "url": "https://www.threads.net/@couple_daily/post/8347935476603164068", "category_hint": "案例分享", "top_comments": [{"author": "用戶1994", "text": "求卡牌連結！在哪裡買？", "likes": 487, "time_ago": "11小時前"}, {"author": "用戶6012", "text": "好羨慕喔 我也想要這樣的感情", "likes": 1580, "time_ago": "12小時前"}, {"author": "用戶6701", "text": "感同身受⋯⋯我家的也是這樣", "likes": 673, "time_ago": "5小時前"}, {"author": "用戶5890", "text": "所以結論是什麼啦XD", "likes": 1009, "time_ago": "8小時前"}, {"author": "用戶3350", "text": "完全認同！我也是這樣想的🙋", "likes": 787, "time_ago": "2小時前"}], "category": "案例分享"}, "summary": "溫馨正向的真實經驗分享獲得大量迴響。最受關注的故事：「我終於跟我暗戀兩年的學長告白了！！！  結局：他說他也要跟我說一件事，然後他就親了我🥹  我們在一起了！！！！！  原來⋯」 留言區充滿祝福與同理，許多人分享自身類似經驗互相鼓勵。"}, {"topic": "抱怨", "post_count": 3, "total_likes": 92100, "top_post": {"id": "thread_20260523_004", "author": "台北愛情故事", "handle": "taipei_love", "date": "2026-05-17 04:54", "timestamp": 1778964864, "text": "分享一下我的奇葩相親經驗😂\n\n對方一坐下來就問我月薪多少、有沒有房子、婚後要不要跟公婆住。\n\n我：我們可以先自我介紹一下嗎？\n他：那些不重要，先確認價值觀合不合。\n\n我心想我連你叫什麼名字都不知道欸大哥！\n\n#相親 #奇葩經驗 #單身萬歲", "likes": 34100, "replies": 1500, "url": "https://www.threads.net/@taipei_love/post/7381171155201470475", "category_hint": "抱怨", "top_comments": [{"author": "用戶2674", "text": "重點是溝通啦 不是誰對誰錯", "likes": 1960, "time_ago": "9小時前"}, {"author": "用戶8123", "text": "真的！說到我心坎裡了", "likes": 332, "time_ago": "11小時前"}, {"author": "用戶2360", "text": "感同身受⋯⋯我家的也是這樣", "likes": 254, "time_ago": "6小時前"}, {"author": "用戶2352", "text": "我覺得要看情況不能一概而論", "likes": 1768, "time_ago": "6小時前"}, {"author": "用戶1214", "text": "原po加油！你不是一個人💪", "likes": 1992, "time_ago": "12小時前"}], "category": "抱怨"}, "summary": "網友們正在抒發對另一半各種行為的不滿與無奈。最常被抱怨的行為包含：電動、忘記、消失、不讀不回。留言區充滿「我家的也是」「原來我不孤單」的同病相怜，大家互相取暖並分享應對方式。"}, {"topic": "幽默梗", "post_count": 3, "total_likes": 247100, "top_post": {"id": "thread_20260523_002", "author": "感情觀察家", "handle": "relationship_watcher", "date": "2026-05-23 09:14", "timestamp": 1779498864, "text": "男友的「我沒事」翻譯機 🤯\n\n他說「沒事」= 有事但不想講\n他說「隨便妳」= 其實有想法但怕吵架\n他說「妳決定就好」= 到時候出錯都妳扛\n他說「我在聽」= 剛剛在放空\n他說「我錯了」= 我不知道錯在哪但先道歉再說\n\n還有什麼要補充的？🤣\n\n#男友語錄 #情侶日常 #懂的就懂", "likes": 92300, "replies": 5600, "url": "https://www.threads.net/@relationship_watcher/post/2921269129172117733", "category_hint": "幽默梗", "top_comments": [{"author": "用戶6439", "text": "但也要看雙方能不能互相理解吧", "likes": 1332, "time_ago": "9小時前"}, {"author": "用戶3029", "text": "這根本在說我男友😂", "likes": 1919, "time_ago": "11小時前"}, {"author": "用戶8894", "text": "求卡牌連結！在哪裡買？", "likes": 1697, "time_ago": "8小時前"}, {"author": "用戶5345", "text": "你脾氣也太好 我早翻桌了", "likes": 228, "time_ago": "2小時前"}, {"author": "用戶5439", "text": "等你交往久了就知道了⋯⋯", "likes": 696, "time_ago": "2小時前"}], "category": "幽默梗"}, "summary": "網友發揮創意製作各種情侶相關梗圖與語錄，引發瘋傳與共鳴。最熱門的創作：「男友的「我沒事」翻譯機 🤯  他說「沒事」= 有事但不想講 他說「隨便妳」= 其實有想法但怕吵架 他⋯」留言區充滿「太中肯了」「這是我男友吧🤣」等爆笑回覆，互動率極高。"}, {"topic": "求助請益", "post_count": 3, "total_likes": 145800, "top_post": {"id": "thread_20260523_017", "author": "感情觀察家", "handle": "relationship_watcher", "date": "2026-05-20 07:10", "timestamp": 1779232224, "text": "發現男友手機裡有交友軟體...\n\n交往三年，已經論及婚嫁。昨天借他手機查東西，不小心看到螢幕上跳出Tinder通知。\n\n我沒有偷看，但那一幕已經在腦海揮之不去。\n\n我該直接問他嗎？還是先觀察？\n\n真的好徬徨...\n\n#出軌 #感情問題 #怎麼辦", "likes": 67800, "replies": 4500, "url": "https://www.threads.net/@relationship_watcher/post/3113551103393091918", "category_hint": "求助請益", "top_comments": [{"author": "用戶5346", "text": "我覺得要看情況不能一概而論", "likes": 1942, "time_ago": "10小時前"}, {"author": "用戶4970", "text": "這什麼求生慾笑爛🤣", "likes": 750, "time_ago": "8小時前"}, {"author": "用戶2799", "text": "等你交往久了就知道了⋯⋯", "likes": 526, "time_ago": "8小時前"}, {"author": "用戶4750", "text": "我也有經歷過 最後分手了😢", "likes": 1132, "time_ago": "9小時前"}, {"author": "用戶1469", "text": "你脾氣也太好 我早翻桌了", "likes": 1873, "time_ago": "3小時前"}], "category": "求助請益"}, "summary": "多位網友正面臨感情困境，上網尋求建議與支持。最受關注的求助：「發現男友手機裡有交友軟體...  交往三年，已經論及婚嫁。昨天借他手機查東西，不小心看到螢幕上跳出Tinder通知。  ⋯」留言區湧入大量建議，多數傾向支持原PO保護自己、設下明確界線。也有部分聲音建議先冷靜溝通、給予對方解釋機會。"}],
+};
+
+// Tab switching
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById('page-' + tab.dataset.tab).classList.add('active');
+  });
+});
+
+// Pie chart
+new Chart(document.getElementById('pieChart'), {
+  type: 'pie',
+  data: {
+    labels: Object.keys(DATA.topicDistribution),
+    datasets: [{
+      data: Object.values(DATA.topicDistribution),
+      backgroundColor: ['#e74c3c','#fd79a8','#fdcb6e','#00b894','#6c5ce7','#0984e3','#636e72'],
+    }]
+  },
+  options: { responsive:true, maintainAspectRatio:true, plugins:{ legend:{ position:'bottom', labels:{ font:{ size:11 } } } } }
+});
+
+// Bar chart (top likes)
+const sorted = [...DATA.posts].sort((a,b) => b.likes - a.likes).slice(0,10);
+new Chart(document.getElementById('barChart'), {
+  type: 'bar',
+  data: {
+    labels: sorted.map(p => p.author || '匿名'),
+    datasets: [{
+      label: '讚數',
+      data: sorted.map(p => p.likes),
+      backgroundColor: '#e74c3c',
+      borderRadius: 4,
+    }]
+  },
+  options: {
+    responsive:true, maintainAspectRatio:true, indexAxis:'y',
+    plugins:{ legend:{ display:false } },
+    scales:{ x:{ ticks:{ callback:v=>v>=1000?(v/1000).toFixed(0)+'k':v } } }
+  }
+});
+
+// Topic summaries
+const topicContainer = document.getElementById('topicContainer');
+DATA.topicSummaries.forEach(s => {
+  const div = document.createElement('div');
+  div.className = 'topic-card';
+  div.innerHTML = `<div class="topic-title">&#128204; ${s.topic} <span class="topic-meta">（${s.post_count} 則 · &#10084; ${s.total_likes?.toLocaleString()}）</span></div><div class="topic-summary">${s.summary}</div>`;
+  topicContainer.appendChild(div);
+});
+
+// Filters
+const filterContainer = document.getElementById('filterContainer');
+const allBtn = document.createElement('button');
+allBtn.className = 'filter-btn active';
+allBtn.textContent = '全部';
+allBtn.dataset.filter = 'all';
+filterContainer.appendChild(allBtn);
+const topics = [...new Set(DATA.posts.map(p => p.category || p.category_hint || '其他'))];
+topics.forEach(t => {
+  const btn = document.createElement('button');
+  btn.className = 'filter-btn';
+  btn.textContent = t;
+  btn.dataset.filter = t;
+  filterContainer.appendChild(btn);
+});
+
+let currentFilter = 'all';
+function renderPosts() {
+  const filtered = currentFilter === 'all' ? DATA.posts : DATA.posts.filter(p => (p.category || p.category_hint || '其他') === currentFilter);
+  const container = document.getElementById('postListContainer');
+  container.innerHTML = filtered.map((p,i) => `
+    <div class="post-card">
+      <h4>&#128100; ${p.author || '匿名'} <span class="meta">@${p.handle||''} &middot; ${p.date||''}</span></h4>
+      <div class="text" onclick="this.classList.toggle('expanded')">${p.text}</div>
+      <div class="stats">&#10084; ${p.likes?.toLocaleString()} &middot; &#128172; ${p.replies} &middot; ${p.category || p.category_hint || '未分類'}</div>
+    </div>
+  `).join('');
+  // Update select
+  const sel = document.getElementById('postSelect');
+  sel.innerHTML = filtered.map((p,i) => `<option value="${i}">&#10084;${p.likes} | ${p.author||'匿名'} | ${(p.text||'').slice(0,30)}...</option>`).join('');
+  sel.onchange = () => showDetail(parseInt(sel.value));
+}
+
+filterContainer.querySelectorAll('.filter-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    filterContainer.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    currentFilter = btn.dataset.filter;
+    renderPosts();
+  });
+});
+
+function showDetail(idx) {
+  const posts = currentFilter === 'all' ? DATA.posts : DATA.posts.filter(p => (p.category || p.category_hint || '其他') === currentFilter);
+  const p = posts[idx];
+  if (!p) return;
+  const container = document.getElementById('detailContainer');
+  let comments = '';
+  (p.top_comments || []).forEach(c => {
+    comments += `<div class="comment"><div class="comment-author">${c.author||'匿名'}</div><div>${c.text}</div><div style="font-size:0.75rem;color:#999;">&#10084; ${c.likes}</div></div>`;
+  });
+  container.innerHTML = `
+    <div class="detail-container">
+      <h3>&#128100; ${p.author||'匿名'} <span style="font-weight:400;color:#999;">@${p.handle||''}</span></h3>
+      <div style="font-size:0.8rem;color:#999;">${p.date||''} &middot; ${p.category||p.category_hint||'未分類'}</div>
+      <div class="text">${p.text}</div>
+      <div style="color:#e74c3c;font-size:0.9rem;">&#10084; ${p.likes?.toLocaleString()} &middot; &#128172; ${p.replies}</div>
+      <div style="margin-top:0.8rem;font-weight:600;color:#666;">&#128172; 熱門留言（前 ${(p.top_comments||[]).length} 則）</div>
+      ${comments || '<div style="color:#999;">暫無留言資料</div>'}
+    </div>
+  `;
+}
+
+renderPosts();
+showDetail(0);
+</script>
+</body>
+</html>

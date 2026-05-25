@@ -26,3 +26,6 @@ Thumbs.db
 
 # Logs
 *.log
+
+# GitHub Pages build output (managed by gh-pages branch)
+docs/
