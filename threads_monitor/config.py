@@ -1,5 +1,16 @@
+import os
 from dataclasses import dataclass, field
 from typing import List, Dict
+
+
+def _is_cloud() -> bool:
+    return "STREAMLIT_SERVER_BASE_URL" in os.environ or "STREAMLIT_RUNTIME" in os.environ
+
+
+def _get_data_dir() -> str:
+    if _is_cloud():
+        return os.path.join("/tmp", "threads_data")
+    return os.path.join(os.path.dirname(__file__), "data")
 
 
 @dataclass
@@ -14,9 +25,16 @@ class Config:
     min_likes: int = 1000
     max_posts: int = 20
     search_days: int = 7
-    data_dir: str = "data"
     output_file: str = "threads_posts.json"
     analysis_file: str = "threads_analysis.json"
+
+    @property
+    def is_cloud(self) -> bool:
+        return _is_cloud()
+
+    @property
+    def data_dir_path(self) -> str:
+        return _get_data_dir()
 
     topic_keywords: Dict[str, List[str]] = field(default_factory=lambda: {
         "工具推薦": ["推薦", "好用", "工具", "APP", "軟體", "網站", "書", "課程",

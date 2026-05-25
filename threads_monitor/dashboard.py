@@ -134,9 +134,17 @@ st.markdown(f"""
 
 
 def load_data(config: Config) -> Optional[Dict]:
-    if os.path.exists(config.analysis_path):
+    path = config.analysis_path
+    if os.path.exists(path):
         try:
-            with open(config.analysis_path, "r", encoding="utf-8") as f:
+            with open(path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except (json.JSONDecodeError, IOError):
+            pass
+    fallback = os.path.join(os.path.dirname(__file__), "data", config.analysis_file)
+    if fallback != path and os.path.exists(fallback):
+        try:
+            with open(fallback, "r", encoding="utf-8") as f:
                 return json.load(f)
         except (json.JSONDecodeError, IOError):
             pass
@@ -150,10 +158,13 @@ def run_scrape(config: Config) -> Dict:
         analyzer = PostAnalyzer(config)
         result = analyzer.analyze_posts(posts)
         os.makedirs(config.data_dir_path, exist_ok=True)
-        with open(config.output_path, "w", encoding="utf-8") as f:
-            json.dump(posts, f, ensure_ascii=False, indent=2)
-        with open(config.analysis_path, "w", encoding="utf-8") as f:
-            json.dump(result, f, ensure_ascii=False, indent=2)
+        try:
+            with open(config.output_path, "w", encoding="utf-8") as f:
+                json.dump(posts, f, ensure_ascii=False, indent=2)
+            with open(config.analysis_path, "w", encoding="utf-8") as f:
+                json.dump(result, f, ensure_ascii=False, indent=2)
+        except (IOError, OSError):
+            pass
         return result
 
 

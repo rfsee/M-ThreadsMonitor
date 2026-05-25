@@ -9,7 +9,7 @@ build/
 threads_monitor/data/threads_posts.json
 
 # Streamlit
-.streamlit/
+.streamlit/secrets.toml
 
 # Output images
 output/
