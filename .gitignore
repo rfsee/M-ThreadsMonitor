@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+
+# Data outputs (sample data only - keep analysis for dashboard)
+threads_monitor/data/threads_posts.json
+
+# Streamlit
+.streamlit/
+
+# Output images
+output/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
