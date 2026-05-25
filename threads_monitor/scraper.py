@@ -1,15 +1,13 @@
+import asyncio
 import json
-import time
 import re
+import time
 import random
 import sys
-import hashlib
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import List, Dict, Optional
-from urllib.parse import quote
 
-import requests
-from bs4 import BeautifulSoup
+from playwright.async_api import async_playwright
 
 from threads_monitor.config import Config
 from threads_monitor.sample_data import generate_sample_data
@@ -24,193 +22,159 @@ def _safe_print(text: str):
 
 
 class ThreadsScraper:
-    BASE_URL = "https://www.threads.net"
-    API_GRAPHQL = "https://www.threads.net/api/graphql"
-
-    SEARCH_QUERY_HASH = "2438c3c4ae5b29b01e5b7951b05c53ef"
+    BASE_URL = "https://www.threads.com"
 
     def __init__(self, config: Config):
         self.config = config
-        self.session = requests.Session()
-        self.session.headers.update({
-            "User-Agent": (
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/125.0.0.0 Safari/537.36"
-            ),
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-            "Accept-Language": "zh-TW,zh;q=0.9,en;q=0.8",
-            "Accept-Encoding": "gzip, deflate, br",
-            "Connection": "keep-alive",
-        })
-        self._init_cookies()
+        self._browser = None
+        self._context = None
 
-    def _init_cookies(self):
-        try:
-            self.session.get(self.BASE_URL, timeout=15)
-        except requests.RequestException:
-            pass
-
-    def _query_graphql(self, query_hash: str, variables: dict) -> Optional[Dict]:
-        payload = {
-            "fb_dtsg": "",
-            "variables": json.dumps(variables, separators=(",", ":")),
-            "server_timestamps": "true",
-            "doc_id": query_hash,
-        }
-        try:
-            resp = self.session.post(
-                self.API_GRAPHQL,
-                data=payload,
-                timeout=20,
+    async def _ensure_browser(self):
+        if not self._browser:
+            p = await async_playwright().start()
+            self._browser = await p.chromium.launch(headless=True)
+            self._context = await self._browser.new_context(
+                user_agent=(
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) "
+                    "Chrome/125.0.0.0 Safari/537.36"
+                ),
+                locale="zh-TW",
             )
-            if resp.status_code == 200:
-                return resp.json()
-            return None
-        except (requests.RequestException, json.JSONDecodeError):
-            return None
 
-    def _fetch_search_html(self, query: str) -> Optional[str]:
-        try:
-            params = {"q": query}
-            resp = self.session.get(
-                f"{self.BASE_URL}/search",
-                params=params,
-                timeout=20,
-                allow_redirects=True,
-            )
-            if resp.status_code == 200:
-                return resp.text
-            return None
-        except requests.RequestException:
-            return None
+    async def _close_browser(self):
+        if self._browser:
+            await self._browser.close()
+            self._browser = None
+            self._context = None
 
-    def _extract_texts_from_scripts(self, html: str) -> List[Dict]:
-        results = []
-        patterns = re.compile(
-            r'"(?:text|caption|description)"\s*:\s*'
-            r'"((?:[^"\\]|\\.)*)"'
-        )
-        likes_pat = re.compile(r'"(?:like_count|likes)"\s*:\s*(\d+)')
-
-        for match in patterns.finditer(html):
-            raw = match.group(1)
-            text = raw.replace("\\n", "\n").replace("\\t", "\t") \
-                      .replace("\\/", "/").replace('\\"', '"')
-            try:
-                text = json.loads(f'"{raw}"')
-            except json.JSONDecodeError:
-                pass
-            if len(text) >= 10:
-                results.append({"text": text, "likes": 0})
-
-        like_matches = likes_pat.findall(html)
-        for i, l in enumerate(like_matches):
-            if i < len(results):
-                results[i]["likes"] = int(l)
-
-        return results
-
-    def _extract_struct_from_next_data(self, html: str) -> List[Dict]:
-        posts = []
-        try:
-            soup = BeautifulSoup(html, "lxml")
-            tag = soup.find("script", id="__NEXT_DATA__")
-            if tag and tag.string:
-                data = json.loads(tag.string)
-                props = data.get("props", {}).get("pageProps", {})
-                items = (props.get("searchData", {})
-                         .get("data", {}).get("items", []))
-
-                for item in items:
-                    post_node = item.get("post", {})
-                    if not post_node:
-                        continue
-                    user = post_node.get("user", {}) or {}
-                    caption = post_node.get("caption", {}) or {}
-                    entities = caption.get("text_entities", []) or []
-                    text = " ".join(e.get("text", "") for e in entities)
-
-                    likes = post_node.get("like_count", 0) or 0
-                    replies = post_node.get("reply_count", 0) or 0
-                    code = post_node.get("code", "") or ""
-                    taken_at = post_node.get("taken_at", 0) or 0
-                    username = user.get("username", "") or ""
-
-                    if taken_at:
-                        date_str = datetime.fromtimestamp(taken_at).strftime("%Y-%m-%d %H:%M")
-                    else:
-                        date_str = ""
-
-                    comments_raw = post_node.get("comments", []) or []
-                    top_comments = []
-                    for c in (comments_raw or [])[:5]:
-                        cu = c.get("user", {}) or {}
-                        top_comments.append({
-                            "author": cu.get("full_name", "") or cu.get("username", ""),
-                            "text": c.get("text", "") or "",
-                            "likes": c.get("like_count", 0) or 0,
-                            "time_ago": "",
-                        })
-
-                    posts.append({
-                        "id": code or f"ts_{int(time.time())}_{random.randint(100,999)}",
-                        "author": user.get("full_name", "") or username,
-                        "handle": username,
-                        "date": date_str,
-                        "timestamp": taken_at or int(time.time()),
-                        "text": text,
-                        "likes": likes,
-                        "replies": replies,
-                        "url": f"https://www.threads.net/@{username}/post/{code}" if username and code else "",
-                        "top_comments": top_comments,
-                    })
-        except Exception:
-            pass
-        return posts
-
-    def _search_via_api(self, keyword: str) -> List[Dict]:
+    async def _search_keyword(self, keyword: str) -> List[Dict]:
         _safe_print(f"  [搜尋] 關鍵字: {keyword}")
+        await self._ensure_browser()
+        page = await self._context.new_page()
+
         found = []
+        try:
+            await page.goto(
+                f"{self.BASE_URL}/search?q={keyword}",
+                timeout=25000,
+                wait_until="domcontentloaded",
+            )
+            await page.wait_for_timeout(6000)
 
-        html = self._fetch_search_html(keyword)
-        if html:
-            found = self._extract_struct_from_next_data(html)
+            result = await page.evaluate(r"""
+() => {
+    const items = {};
+    const links = document.querySelectorAll('a[href*="/post/"]');
+
+    links.forEach(a => {
+        const href = a.href;
+        const parts = href.split('/');
+        let handle = '', code = '';
+        for (let i = 0; i < parts.length; i++) {
+            if (parts[i].startsWith('@')) {
+                handle = parts[i].slice(1);
+                if (i + 2 < parts.length && parts[i+1] === 'post') {
+                    code = parts[i+2];
+                }
+                break;
+            }
+        }
+        if (!handle || !code || href.includes('/media')) return;
+
+        let card = a;
+        for (let i = 0; i < 8 && card; i++) {
+            if ((card.innerText || '').length > 100) break;
+            card = card.parentElement;
+        }
+
+        const fullText = card ? card.innerText || '' : (a.innerText || '');
+        items[code] = {handle, code, url: 'https://www.threads.com/@' + handle + '/post/' + code, text: fullText};
+    });
+
+    return JSON.stringify(Object.values(items));
+}
+""")
+            found = json.loads(result)
             if found:
-                _safe_print(f"    從 Next.js data 解析到 {len(found)} 則")
-                return found
+                _safe_print(f"    取得 {len(found)} 則貼文")
 
-            raw_texts = self._extract_texts_from_scripts(html)
-            if raw_texts:
-                _safe_print(f"    從 script tags 解析到 {len(raw_texts)} 則原始文字")
-                for rt in raw_texts[:5]:
-                    found.append({
-                        "id": f"st_{int(time.time())}_{random.randint(100,999)}",
-                        "author": "",
-                        "handle": "",
-                        "date": datetime.now().strftime("%Y-%m-%d %H:%M"),
-                        "timestamp": int(time.time()),
-                        "text": rt["text"],
-                        "likes": rt["likes"],
-                        "replies": 0,
-                        "url": "",
-                        "top_comments": [],
-                    })
-                return found
+        except Exception as e:
+            _safe_print(f"    [ERROR] {e}")
 
-        _safe_print(f"    [INFO] 無資料")
+        finally:
+            await page.close()
+
         return found
 
-    def _is_low_quality(self, posts: List[Dict]) -> bool:
-        if len(posts) < 5:
-            return True
-        no_author = sum(1 for p in posts if not p.get("author"))
-        no_text = sum(1 for p in posts if len(p.get("text", "")) < 15)
-        if no_author > len(posts) * 0.5:
-            return True
-        if no_text > len(posts) * 0.3:
-            return True
-        return False
+    def _parse_card(self, card_text: str, handle: str, code: str = "") -> Dict:
+        lines = [l.strip() for l in card_text.split("\n")]
+        if not lines:
+            return {}
+
+        # Last lines contain engagement numbers
+        num_lines = []
+        content_lines = []
+        for line in reversed(lines):
+            clean = line.strip().replace(",", "")
+            if clean.replace(".", "").replace(" ", "").isdigit() and len(clean) < 20:
+                num_lines.insert(0, line.strip())
+            else:
+                break
+        # Also skip "翻譯" / "Translate" line before numbers
+        text_parts = []
+        for line in lines:
+            stripped = line.strip()
+            if stripped in ("翻譯", "Translate") or not stripped:
+                continue
+            if any(stripped.replace(",", "").replace(".", "").replace(" ", "").isdigit() for n in num_lines if stripped == n):
+                continue
+            text_parts.append(stripped)
+
+        # Parse numbers
+        likes = 0
+        replies = 0
+        if num_lines:
+            try: likes = int(num_lines[0].replace(",", ""))
+            except ValueError: pass
+        if len(num_lines) > 1:
+            try: replies = int(num_lines[1].replace(",", ""))
+            except ValueError: pass
+
+        # Check if second line is a display name (not a time pattern)
+        author_name = handle
+        if len(text_parts) > 1:
+            second = text_parts[1]
+            if not re.match(r"^\d+[小時天月年]", second) and len(second) > 1:
+                author_name = second
+
+        # Skip handle (first line) for text
+        text = "\n".join(text_parts[1:]).strip()
+
+        # Try to extract a date
+        date_str = datetime.now().strftime("%Y-%m-%d")
+        for line in text_parts[1:8]:
+            m = re.match(r"(\d{4})[.\-/]\s*(\d{1,2})[.\-/]\s*(\d{1,2})", line)
+            if m:
+                try:
+                    dt = datetime(int(m.group(1)), int(m.group(2)), int(m.group(3)))
+                    date_str = dt.strftime("%Y-%m-%d")
+                except ValueError:
+                    pass
+                break
+
+        return {
+            "id": f"ts_{int(time.time())}_{random.randint(100,999)}",
+            "author": author_name,
+            "handle": handle,
+            "date": date_str,
+            "timestamp": int(datetime.now().timestamp()),
+            "text": text,
+            "likes": likes,
+            "replies": replies,
+            "url": f"https://www.threads.com/@{handle}/post/{code}",
+            "top_comments": [],
+        }
 
     def scrape(self, force_sample: bool = False) -> List[Dict]:
         if force_sample:
@@ -218,36 +182,51 @@ class ThreadsScraper:
             return generate_sample_data(self.config.max_posts)
 
         _safe_print("=" * 50)
-        _safe_print("  Threads 熱門貼文爬取")
+        _safe_print("  Threads 熱門貼文爬取（Playwright）")
         _safe_print("=" * 50)
 
-        all_posts = []
-        keywords = self.config.keywords
+        try:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            result = loop.run_until_complete(self._scrape_all())
 
-        for i, kw in enumerate(keywords):
+            if not result or self._is_low_quality(result):
+                _safe_print(f"\n[WARN] Playwright 資料不足（{len(result) if result else 0} 則）")
+                _safe_print("[WARN] 自動切換至模擬資料\n")
+                return generate_sample_data(self.config.max_posts)
+
+            _safe_print(f"\n[OK] 共收集 {len(result)} 則真實 Threads 貼文")
+            return result
+
+        except Exception as e:
+            _safe_print(f"\n[ERROR] Playwright 爬取失敗: {e}")
+            _safe_print("[WARN] 自動切換至模擬資料\n")
+            return generate_sample_data(self.config.max_posts)
+
+    async def _scrape_all(self) -> List[Dict]:
+        all_posts = []
+        seen_urls = set()
+
+        for i, kw in enumerate(self.config.keywords):
             if len(all_posts) >= self.config.max_posts * 3:
                 break
-            posts = self._search_via_api(kw)
-            all_posts.extend(posts)
-            time.sleep(1.0)
-
-        seen = set()
-        unique = []
-        for p in all_posts:
-            key = p.get("text", "")[:80]
-            if key and key not in seen:
-                seen.add(key)
-                unique.append(p)
-        all_posts = unique
+            posts = await self._search_keyword(kw)
+            for p in posts:
+                url = p.get("url", "")
+                if url and url not in seen_urls:
+                    seen_urls.add(url)
+                    parsed = self._parse_card(p.get("text", ""), p.get("handle", ""), p.get("code", ""))
+                    if parsed.get("text", "").strip():
+                        all_posts.append(parsed)
+            await asyncio.sleep(1.0)
 
         all_posts.sort(key=lambda x: x.get("likes", 0), reverse=True)
-        result = all_posts[:self.config.max_posts]
+        return all_posts[: self.config.max_posts]
 
-        if self._is_low_quality(result):
-            _safe_print(f"\n[WARN] 真實資料品質不足（{len(result)} 則，缺乏作者/文字資訊）")
-            _safe_print("[WARN] 自動切換至模擬資料以展示完整儀表板功能\n")
-            result = generate_sample_data(self.config.max_posts)
-        else:
-            _safe_print(f"\n[OK] 共收集 {len(result)} 則真實 Threads 貼文")
-
-        return result
+    def _is_low_quality(self, posts: List[Dict]) -> bool:
+        if len(posts) < 3:
+            return True
+        no_text = sum(1 for p in posts if len(p.get("text", "")) < 15)
+        if no_text > len(posts) * 0.5:
+            return True
+        return False
