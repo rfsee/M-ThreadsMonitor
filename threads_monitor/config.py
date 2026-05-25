@@ -28,7 +28,7 @@ class Config:
 
     min_likes: int = 1000
     max_posts: int = 20
-    search_days: int = 7
+    search_days: int = 21
     output_file: str = "threads_posts.json"
     analysis_file: str = "threads_analysis.json"
 

@@ -4,7 +4,7 @@ import re
 import time
 import random
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import List, Dict, Optional
 
 from playwright.async_api import async_playwright
@@ -153,12 +153,14 @@ class ThreadsScraper:
 
         # Try to extract a date
         date_str = datetime.now().strftime("%Y-%m-%d")
+        parsed_dt = None
         for line in text_parts[1:8]:
             m = re.match(r"(\d{4})[.\-/]\s*(\d{1,2})[.\-/]\s*(\d{1,2})", line)
             if m:
                 try:
                     dt = datetime(int(m.group(1)), int(m.group(2)), int(m.group(3)))
                     date_str = dt.strftime("%Y-%m-%d")
+                    parsed_dt = dt
                 except ValueError:
                     pass
                 break
@@ -168,6 +170,7 @@ class ThreadsScraper:
             "author": author_name,
             "handle": handle,
             "date": date_str,
+            "_parsed_date": parsed_dt,
             "timestamp": int(datetime.now().timestamp()),
             "text": text,
             "likes": likes,
@@ -206,6 +209,7 @@ class ThreadsScraper:
     async def _scrape_all(self) -> List[Dict]:
         all_posts = []
         seen_urls = set()
+        cutoff = datetime.now() - timedelta(days=self.config.search_days)
 
         for i, kw in enumerate(self.config.keywords):
             if len(all_posts) >= self.config.max_posts * 3:
@@ -217,6 +221,9 @@ class ThreadsScraper:
                     seen_urls.add(url)
                     parsed = self._parse_card(p.get("text", ""), p.get("handle", ""), p.get("code", ""))
                     if parsed.get("text", "").strip():
+                        pd = parsed.pop("_parsed_date", None)
+                        if pd and pd < cutoff:
+                            continue
                         all_posts.append(parsed)
             await asyncio.sleep(1.0)
 
