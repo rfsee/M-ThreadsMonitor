@@ -230,7 +230,7 @@ def generate_sample_data(max_posts: int = 20) -> List[Dict]:
             "text": sp["text"],
             "likes": sp["likes"],
             "replies": replies_count,
-            "url": "",
+            "url": f"https://www.threads.net/@{author['handle']}/post/{random.randint(1000000000000000000, 9999999999999999999)}",
             "category_hint": sp["category_hint"],
             "top_comments": top_comments,
         }
