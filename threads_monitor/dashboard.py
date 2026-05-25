@@ -188,28 +188,29 @@ def render_metrics(data: Dict):
             )
 
 
-def render_topic_pie(data: Dict):
+def render_topic_bar(data: Dict):
     dist = data.get("topic_distribution", {})
     if not dist:
         return
     df = pd.DataFrame([
-        {"主題": t, "貼文數": c} for t, c in dist.items()
+        {"主題": t, "貼文數": c} for t, c in sorted(dist.items(), key=lambda x: x[1], reverse=True)
     ])
-    colors = px.colors.qualitative.Set2[:len(df)]
-    fig = px.pie(
-        df, values="貼文數", names="主題",
-        color_discrete_sequence=colors,
-        hole=0.4,
+    fig = px.bar(
+        df, x="貼文數", y="主題", orientation="h",
+        text_auto=True,
+        color="貼文數", color_continuous_scale="Reds_r",
     )
     fig.update_traces(
         textposition="outside",
-        textinfo="label+percent",
-        hovertemplate="<b>%{label}</b><br>貼文數: %{value}<br>佔比: %{percent}<extra></extra>",
+        hovertemplate="<b>%{y}</b><br>貼文數: %{x}<extra></extra>",
     )
     fig.update_layout(
         height=320, margin=dict(t=0, b=0, l=0, r=0),
         font=dict(size=12),
+        yaxis=dict(autorange="reversed"),
         showlegend=False,
+        coloraxis_showscale=False,
+        xaxis=dict(dtick=1),
     )
     st.plotly_chart(fig, width="stretch")
 
@@ -218,10 +219,13 @@ def render_likes_chart(posts: List[Dict]):
     if not posts:
         return
     df = pd.DataFrame(posts)
-    df["short_text"] = df["text"].str[:30].str.replace("\n", " ") + "⋯"
+    df["label"] = df.apply(
+        lambda r: f'{r.get("author","匿名")} | {r.get("text","")[:15].replace(chr(10)," ")}⋯',
+        axis=1,
+    )
     df = df.sort_values("likes")
     fig = px.bar(
-        df, x="likes", y="short_text", orientation="h",
+        df, x="likes", y="label", orientation="h",
         text_auto=".0s",
         color="likes", color_continuous_scale="Reds",
     )
@@ -234,7 +238,7 @@ def render_likes_chart(posts: List[Dict]):
         height=500,
         xaxis_title="讚數", yaxis_title="",
         margin=dict(l=0, r=40, t=0, b=0),
-        font=dict(size=11),
+        font=dict(size=10),
         yaxis=dict(autorange="reversed"),
         showlegend=False,
     )
@@ -318,6 +322,10 @@ def render_posts_table(posts: List[Dict]):
 
 
 def render_post_detail(post: Dict):
+    post_url = post.get("url", "")
+    url_btn = ""
+    if post_url:
+        url_btn = f'<a href="{post_url}" target="_blank" rel="noopener" style="display:inline-block;margin-top:0.5rem;padding:0.3rem 1rem;background:#e74c3c;color:#fff;border-radius:6px;text-decoration:none;font-size:0.85rem;">🔗 前往 Threads 原文</a>'
     st.markdown(
         f'<div class="post-card">'
         f'<div class="post-author">👤 {post.get("author", "匿名")} '
@@ -330,6 +338,7 @@ def render_post_detail(post: Dict):
         f'💬 {post.get("replies", 0):,}  '
         f'🏷️ {post.get("category", post.get("category_hint", "未分類"))}'
         f'</div>'
+        f'{url_btn}'
         f'</div>',
         unsafe_allow_html=True,
     )
@@ -383,6 +392,7 @@ def main():
     )
 
     posts = data.get("posts", [])
+    punchlines = data.get("punchlines", [])
 
     topics = ["全部"] + sorted(data.get("topic_distribution", {}).keys())
     selected_topic = st.sidebar.selectbox("📂 篩選主題", topics)
@@ -423,14 +433,27 @@ def main():
     ])
 
     with tab1:
+        render_metrics(data)
+        if punchlines:
+            st.markdown('<div class="sub-header">💥 本週爆發金句</div>', unsafe_allow_html=True)
+            cols = st.columns(len(punchlines))
+            for col, pl in zip(cols, punchlines):
+                with col:
+                    st.markdown(
+                        f'<div class="topic-card" style="text-align:center;">'
+                        f'<div style="font-size:1.1rem;font-weight:600;color:#e74c3c;margin-bottom:0.3rem;">「{pl["text"]}」</div>'
+                        f'<div style="font-size:0.8rem;color:#999;">— {pl["source"]} · ❤️ {pl["likes"]:,}</div>'
+                        f'</div>',
+                        unsafe_allow_html=True,
+                    )
+
         col_left, col_right = st.columns([1.2, 1])
         with col_left:
-            render_metrics(data)
-            st.markdown('<div class="sub-header">📈 讚數分布</div>', unsafe_allow_html=True)
+            st.markdown('<div class="sub-header">📈 讚數排行（作者 | 貼文前 15 字）</div>', unsafe_allow_html=True)
             render_likes_chart(posts)
         with col_right:
-            st.markdown('<div class="sub-header">🎯 主題分佈</div>', unsafe_allow_html=True)
-            render_topic_pie(data)
+            st.markdown('<div class="sub-header">🎯 主題分佈（由多到少）</div>', unsafe_allow_html=True)
+            render_topic_bar(data)
             st.markdown('<div class="sub-header">📅 時間趨勢</div>', unsafe_allow_html=True)
             render_timeline_chart(posts)
 

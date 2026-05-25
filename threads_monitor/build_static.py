@@ -13,6 +13,7 @@ def build_html(data: dict) -> str:
     posts_json = json.dumps(data.get("posts", []), ensure_ascii=False)
     topic_dist_json = json.dumps(data.get("topic_distribution", {}), ensure_ascii=False)
     summaries_json = json.dumps(data.get("topic_summaries", []), ensure_ascii=False)
+    punchlines_json = json.dumps(data.get("punchlines", []), ensure_ascii=False)
 
     total = data["total_posts"]
     total_likes = f"{data['total_likes']:,}"
@@ -48,6 +49,10 @@ body {{ font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-seri
 .chart-container h3 {{ font-size:0.95rem; color:#555; margin-bottom:0.5rem; }}
 .charts-row {{ display:grid; grid-template-columns:1fr 1fr; gap:1rem; }}
 @media(max-width:640px){{ .charts-row {{ grid-template-columns:1fr; }} }}
+.punchline-row {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:0.8rem; margin-bottom:1.5rem; }}
+.punchline-card {{ background:#fff; border-radius:10px; padding:1rem; text-align:center; box-shadow:0 1px 3px rgba(0,0,0,.08); border-left:4px solid #e74c3c; }}
+.punchline-text {{ font-size:1rem; font-weight:600; color:#e74c3c; margin-bottom:0.3rem; line-height:1.4; }}
+.punchline-source {{ font-size:0.8rem; color:#999; }}
 .topic-card {{ background:#fff; border-radius:10px; padding:1rem; margin-bottom:0.8rem; box-shadow:0 1px 3px rgba(0,0,0,.08); }}
 .topic-title {{ font-weight:600; color:#e74c3c; margin-bottom:0.3rem; font-size:1rem; }}
 .topic-meta {{ font-size:0.8rem; color:#999; margin-bottom:0.5rem; }}
@@ -58,8 +63,11 @@ body {{ font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-seri
 .post-card .text {{ font-size:0.85rem; color:#333; margin:0.3rem 0; white-space:pre-wrap; max-height:4em; overflow:hidden; cursor:pointer; }}
 .post-card .text.expanded {{ max-height:none; }}
 .post-card .stats {{ font-size:0.8rem; color:#e74c3c; }}
+.post-card .post-url {{ display:inline-block; margin-top:0.3rem; padding:0.2rem 0.8rem; background:#e74c3c; color:#fff; border-radius:6px; text-decoration:none; font-size:0.75rem; }}
+.post-card .post-url:hover {{ background:#c0392b; }}
 .detail-container {{ background:#fff; border-radius:10px; padding:1rem; box-shadow:0 1px 3px rgba(0,0,0,.08); }}
 .detail-container .text {{ white-space:pre-wrap; font-size:0.95rem; line-height:1.6; margin:0.8rem 0; }}
+.detail-container .post-url {{ display:inline-block; margin-top:0.5rem; padding:0.3rem 1rem; background:#e74c3c; color:#fff; border-radius:6px; text-decoration:none; font-size:0.85rem; }}
 .comment {{ background:#f5f5f5; border-radius:6px; padding:0.5rem 0.8rem; margin:0.3rem 0; font-size:0.85rem; }}
 .comment-author {{ font-weight:600; color:#e74c3c; font-size:0.8rem; }}
 .post-select {{ width:100%; padding:0.5rem; border:1px solid #ddd; border-radius:6px; margin-bottom:1rem; font-size:0.9rem; }}
@@ -91,9 +99,10 @@ body {{ font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-seri
 <div class="metric-card"><div class="metric-value">{total_replies}</div><div class="metric-label">&#128172; 總留言數</div></div>
 <div class="metric-card"><div class="metric-value">{avg_likes}</div><div class="metric-label">&#11088; 平均讚數</div></div>
 </div>
+<div id="punchlineContainer" class="punchline-row"></div>
 <div class="charts-row">
-<div class="chart-container"><h3>&#127921; 主題分佈</h3><canvas id="pieChart"></canvas></div>
-<div class="chart-container"><h3>&#128200; 讚數排行</h3><canvas id="barChart"></canvas></div>
+<div class="chart-container"><h3>&#127921; 主題分佈（由多到少）</h3><canvas id="topicBarChart"></canvas></div>
+<div class="chart-container"><h3>&#128200; 讚數排行（作者 | 貼文前 15 字）</h3><canvas id="likesBarChart"></canvas></div>
 </div>
 </div>
 
@@ -119,6 +128,7 @@ const DATA = {{
   posts: {posts_json},
   topicDistribution: {topic_dist_json},
   topicSummaries: {summaries_json},
+  punchlines: {punchlines_json},
 }};
 
 // Tab switching
@@ -131,27 +141,44 @@ document.querySelectorAll('.tab').forEach(tab => {{
   }});
 }});
 
-// Pie chart
-new Chart(document.getElementById('pieChart'), {{
-  type: 'pie',
-  data: {{
-    labels: Object.keys(DATA.topicDistribution),
-    datasets: [{{
-      data: Object.values(DATA.topicDistribution),
-      backgroundColor: ['#e74c3c','#fd79a8','#fdcb6e','#00b894','#6c5ce7','#0984e3','#636e72'],
-    }}]
-  }},
-  options: {{ responsive:true, maintainAspectRatio:true, plugins:{{ legend:{{ position:'bottom', labels:{{ font:{{ size:11 }} }} }} }} }}
+// Punchlines
+const punchlineContainer = document.getElementById('punchlineContainer');
+DATA.punchlines.forEach(pl => {{
+  const div = document.createElement('div');
+  div.className = 'punchline-card';
+  div.innerHTML = `<div class="punchline-text">\\u201c${{pl.text}}\\u201d</div><div class="punchline-source">\\u2014 ${{pl.source}} &middot; &#10084; ${{pl.likes?.toLocaleString()}}</div>`;
+  punchlineContainer.appendChild(div);
 }});
 
-// Bar chart (top likes)
-const sorted = [...DATA.posts].sort((a,b) => b.likes - a.likes).slice(0,10);
-new Chart(document.getElementById('barChart'), {{
+// Topic horizontal bar chart (sorted descending)
+const dist = DATA.topicDistribution;
+const sortedDist = Object.entries(dist).sort((a,b) => b[1] - a[1]);
+new Chart(document.getElementById('topicBarChart'), {{
   type: 'bar',
   data: {{
-    labels: sorted.map(p => p.author || '匿名'),
+    labels: sortedDist.map(([k]) => k),
     datasets: [{{
-      label: '讚數',
+      data: sortedDist.map(([,v]) => v),
+      backgroundColor: ['#e74c3c','#fd79a8','#fdcb6e','#00b894','#6c5ce7','#0984e3','#636e72'],
+      borderRadius: 4,
+    }}]
+  }},
+  options: {{
+    responsive:true, maintainAspectRatio:true, indexAxis:'y',
+    plugins:{{ legend:{{ display:false }} }},
+    scales:{{ x:{{ ticks:{{ stepSize:1 }} }} }}
+  }}
+}});
+
+// Likes bar chart (author | first 15 chars)
+const sorted = [...DATA.posts].sort((a,b) => b.likes - a.likes).slice(0,10);
+const labels = sorted.map(p => (p.author || '\\u533f\\u540d') + ' | ' + (p.text||'').slice(0,15).replace(/\\n/g,' ') + '\\u22ef');
+new Chart(document.getElementById('likesBarChart'), {{
+  type: 'bar',
+  data: {{
+    labels: labels,
+    datasets: [{{
+      label: '\\u8b9a\\u6578',
       data: sorted.map(p => p.likes),
       backgroundColor: '#e74c3c',
       borderRadius: 4,
@@ -160,7 +187,8 @@ new Chart(document.getElementById('barChart'), {{
   options: {{
     responsive:true, maintainAspectRatio:true, indexAxis:'y',
     plugins:{{ legend:{{ display:false }} }},
-    scales:{{ x:{{ ticks:{{ callback:v=>v>=1000?(v/1000).toFixed(0)+'k':v }} }} }}
+    scales:{{ x:{{ ticks:{{ callback:v=>v>=1000?(v/1000).toFixed(0)+'k':v }} }} }},
+    font:{{ size:10 }}
   }}
 }});
 
@@ -198,6 +226,7 @@ function renderPosts() {{
       <h4>&#128100; ${{p.author || '匿名'}} <span class="meta">@${{p.handle||''}} &middot; ${{p.date||''}}</span></h4>
       <div class="text" onclick="this.classList.toggle('expanded')">${{p.text}}</div>
       <div class="stats">&#10084; ${{p.likes?.toLocaleString()}} &middot; &#128172; ${{p.replies}} &middot; ${{p.category || p.category_hint || '未分類'}}</div>
+      ${{p.url ? '<a class="post-url" href="' + p.url + '" target="_blank" rel="noopener">&#128279; 前往原文</a>' : ''}}
     </div>
   `).join('');
   // Update select
@@ -230,6 +259,7 @@ function showDetail(idx) {{
       <div style="font-size:0.8rem;color:#999;">${{p.date||''}} &middot; ${{p.category||p.category_hint||'未分類'}}</div>
       <div class="text">${{p.text}}</div>
       <div style="color:#e74c3c;font-size:0.9rem;">&#10084; ${{p.likes?.toLocaleString()}} &middot; &#128172; ${{p.replies}}</div>
+      ${{p.url ? '<a class="post-url" href="' + p.url + '" target="_blank" rel="noopener">&#128279; 前往 Threads 原文</a>' : ''}}
       <div style="margin-top:0.8rem;font-weight:600;color:#666;">&#128172; 熱門留言（前 ${{(p.top_comments||[]).length}} 則）</div>
       ${{comments || '<div style="color:#999;">暫無留言資料</div>'}}
     </div>

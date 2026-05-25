@@ -52,11 +52,6 @@ class Config:
     })
 
     @property
-    def data_dir_path(self) -> str:
-        import os
-        return os.path.join(os.path.dirname(__file__), self.data_dir)
-
-    @property
     def output_path(self) -> str:
         import os
         return os.path.join(self.data_dir_path, self.output_file)

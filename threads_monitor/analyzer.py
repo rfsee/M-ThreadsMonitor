@@ -94,6 +94,8 @@ class PostAnalyzer:
         total_likes = sum(p.get("likes", 0) for p in posts)
         total_replies = sum(p.get("replies", 0) for p in posts)
 
+        punchlines = self._extract_punchlines(posts)
+
         return {
             "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "total_posts": len(posts),
@@ -106,8 +108,45 @@ class PostAnalyzer:
                 t: len(g) for t, g in sorted(groups.items())
             },
             "topic_summaries": summaries,
+            "punchlines": punchlines,
             "posts": posts,
         }
+
+    def _extract_punchlines(self, posts: List[Dict]) -> List[Dict]:
+        candidates = []
+        for p in posts:
+            lines = p.get("text", "").split("\n")
+            for line in lines:
+                line = line.strip()
+                if len(line) < 8 or len(line) > 100:
+                    continue
+                if line.startswith("#") or line.startswith("http"):
+                    continue
+                q_score = 0
+                if "?" in line or "？" in line:
+                    q_score += 2
+                if "!" in line or "！" in line:
+                    q_score += 2
+                if any(kw in line for kw in ["其實", "根本", "真的", "難道", "只有我", "笑死"]):
+                    q_score += 3
+                score = (p.get("likes", 0) // 1000) * q_score
+                if q_score > 0:
+                    candidates.append({
+                        "text": line,
+                        "source": p.get("author", "匿名"),
+                        "likes": p.get("likes", 0),
+                        "score": score,
+                    })
+        candidates.sort(key=lambda x: x["score"], reverse=True)
+        seen = []
+        result = []
+        for c in candidates:
+            if c["text"] not in seen:
+                seen.append(c["text"])
+                result.append(c)
+                if len(result) >= 3:
+                    break
+        return result
 
     def _summarize_group(self, topic: str, posts: List[Dict]) -> Dict:
         likes = [p.get("likes", 0) for p in posts]
@@ -127,110 +166,167 @@ class PostAnalyzer:
             "summary": summary,
         }
 
-    def _summarize_觀點爭論(self, posts) -> str:
-        all_text = "\n".join(p.get("text", "") for p in posts)
-        has_both = any(kw in all_text for kw in ["可是", "但是", "不過", "然而"])
-        has_ques = any(kw in all_text for kw in ["大家覺得", "有人也", "是不是", "應該"])
-        top = max(posts, key=lambda x: x.get("likes", 0))
-        preview = top.get("text", "")[:50].replace("\n", " ") + "⋯"
+    def _quote(self, text: str, max_len: int = 40) -> str:
+        t = text.replace("\n", " ").strip()
+        if len(t) <= max_len:
+            return t
+        return t[:max_len] + "⋯"
 
-        parts = []
-        if has_ques:
-            parts.append(f"討論焦點圍繞「{preview}」，網友們對感情中的價值觀標準有明顯分歧。")
-        else:
-            parts.append(f"這個話題引發了多方觀點交鋒。")
-        if has_both:
-            parts.append("正反雙方各有論述，部分網友認為要看具體情況無法一概而論，另一派則有明確立場。")
-        else:
-            parts.append("多數留言傾向支持特定觀點，但仍有不同意見。")
-        parts.append("整體討論理性且熱烈，反映這個話題在當代感情中的重要性。")
-        return "\n".join(parts)
+    def _summarize_觀點爭論(self, posts) -> str:
+        top = max(posts, key=lambda x: x.get("likes", 0))
+        top_text = self._quote(top.get("text", ""), 50)
+
+        parts = [f"【爭什麼】「{top_text}」"]
+
+        lines = []
+        for p in posts:
+            lines.extend(p.get("text", "").split("\n"))
+        all_text = " ".join(lines)
+
+        pos_quotes = []
+        neg_quotes = []
+        for line in lines:
+            l = line.strip()
+            if len(l) < 6:
+                continue
+            if any(kw in l for kw in ["同意", "+1", "認同", "支持", "沒錯", "真的", "就是啊"]):
+                pos_quotes.append(self._quote(l, 35))
+            if any(kw in l for kw in ["可是", "但是", "不同意", "不一定", "看情況", "也未必"]):
+                neg_quotes.append(self._quote(l, 35))
+
+        pos_kw = ["其實", "應該", "本來就", "很正常", "不合理", "誇張"]
+        neg_kw = ["不一定", "看人", "互相", "溝通", "每個人"]
+        for line in lines:
+            l = line.strip()
+            if len(l) < 6:
+                continue
+            if any(kw in l for kw in pos_kw):
+                if self._quote(l, 35) not in pos_quotes:
+                    pos_quotes.append(self._quote(l, 35))
+            if any(kw in l for kw in neg_kw):
+                if self._quote(l, 35) not in neg_quotes:
+                    neg_quotes.append(self._quote(l, 35))
+
+        if pos_quotes:
+            parts.append(f"【正方金句】{pos_quotes[0]}")
+        if neg_quotes:
+            parts.append(f"【反方駁斥】{neg_quotes[0]}")
+        if len(pos_quotes) > 1 or len(neg_quotes) > 1:
+            parts.append(f"【其他聲音】{'｜'.join((pos_quotes+neg_quotes)[:4])}")
+
+        parts.append(f"（共 {len(posts)} 篇交鋒，最高讚 {top.get('likes',0):,}）")
+        return " ".join(parts)
 
     def _summarize_工具推薦(self, posts) -> str:
-        top_post = max(posts, key=lambda x: x.get("likes", 0))
-        text = top_post.get("text", "")
-        lines = [l.strip() for l in text.split("\n") if l.strip() and len(l.strip()) > 5]
-        preview = lines[0][:60] if lines else text[:60]
-        preview = preview.replace("\n", " ") + "⋯"
+        top = max(posts, key=lambda x: x.get("likes", 0))
+        text = top.get("text", "")
+        first_line = text.split("\n")[0].strip()
+        top_preview = self._quote(text, 45)
 
-        tips = []
-        for p in posts[:3]:
+        recommended = []
+        for p in posts[:5]:
             t = p.get("text", "")
-            for kw in ["推薦", "大推", "必看", "分享"]:
+            for kw in ["推薦", "大推", "必看"]:
                 idx = t.find(kw)
                 if idx >= 0:
-                    tips.append(t[idx:idx+30].replace("\n", " "))
+                    item = t[idx:idx+25].replace("\n", " ")
+                    if item not in recommended:
+                        recommended.append(item)
                     break
 
-        return (
-            f"社群正在熱烈推薦各種戀愛相關的資源與工具。"
-            f"最受關注的推薦：「{preview}」"
-            f"{' 其他熱門推薦：'+'、'.join(tips[:3]) if tips else ''}"
-            f" 留言區使用者普遍給予正面回饋，認為這些資源實用且有幫助。"
-        )
+        parts = [f"【本週最推】{top_preview}"]
+        if recommended:
+            parts.append(f"【熱門清單】{'｜'.join(recommended[:4])}")
+        parts.append(f"（{len(posts)} 篇推薦文，最高 {top.get('likes',0):,} 讚）")
+        return " ".join(parts)
 
     def _summarize_案例分享(self, posts) -> str:
         top = max(posts, key=lambda x: x.get("likes", 0))
         text = top.get("text", "")
-        preview = text[:60].replace("\n", " ") + "⋯"
+        preview = self._quote(text, 50)
+
         has_pos = any(kw in text for kw in ["感動", "幸福", "開心", "溫暖", "甜蜜", "在一起"])
         has_neg = any(kw in text for kw in ["分手", "難過", "哭", "傷心", "痛苦", "離開"])
 
         if has_pos:
-            vibe = "溫馨正向的真實經驗分享"
+            vibe = "甜到蛀牙的真實經驗"
         elif has_neg:
-            vibe = "令人心疼的真實經歷，引發大量共鳴與安慰"
+            vibe = "讓人心疼的分手敘事"
         else:
-            vibe = "網友們的真實愛情故事"
+            vibe = "真實愛情切片"
 
-        return (
-            f"{vibe}獲得大量迴響。最受關注的故事：「{preview}」"
-            f" 留言區充滿祝福與同理，許多人分享自身類似經驗互相鼓勵。"
-        )
+        key_detail = ""
+        lines = [l.strip() for l in text.split("\n") if len(l.strip()) > 10]
+        for l in lines:
+            if any(kw in l for kw in ["他說", "我說", "罵", "哭", "抱", "親", "感動", "心碎"]):
+                key_detail = self._quote(l, 40)
+                break
+
+        parts = [f"【{vibe}】{preview}"]
+        if key_detail:
+            parts.append(f"【關鍵瞬間】{key_detail}")
+        parts.append(f"（{len(posts)} 篇故事，最高 {top.get('likes',0):,} 讚）")
+        return " ".join(parts)
 
     def _summarize_抱怨(self, posts) -> str:
         all_text = "\n".join(p.get("text", "") for p in posts)
+
         targets = []
-        for t in ["電動", "已讀", "忘記", "說謊", "冷淡", "消失", "敷衍", "不讀不回"]:
+        for t in ["電動", "已讀", "忘記", "說謊", "冷淡", "消失", "敷衍", "不讀不回", "手遊", "裝死"]:
             if t in all_text:
                 targets.append(t)
 
-        return (
-            f"網友們正在抒發對另一半各種行為的不滿與無奈。"
-            f"{'最常被抱怨的行為包含：'+'、'.join(targets[:5])+'。' if targets else ''}"
-            f"留言區充滿「我家的也是」「原來我不孤單」的同病相怜，"
-            f"大家互相取暖並分享應對方式。"
-        )
+        worst = max(posts, key=lambda x: x.get("likes", 0))
+        worst_preview = self._quote(worst.get("text", ""), 45)
+
+        parts = [f"【最爆怨】{worst_preview}"]
+        if targets:
+            parts.append(f"【雷點排行】{'、'.join(targets[:5])}")
+        parts.append(f"（{len(posts)} 篇抱怨文，最高 {worst.get('likes',0):,} 讚）")
+        return " ".join(parts)
 
     def _summarize_幽默梗(self, posts) -> str:
         top = max(posts, key=lambda x: x.get("likes", 0))
         text = top.get("text", "")
-        preview = text[:50].replace("\n", " ") + "⋯"
-        return (
-            f"網友發揮創意製作各種情侶相關梗圖與語錄，引發瘋傳與共鳴。"
-            f"最熱門的創作：「{preview}」"
-            f"留言區充滿「太中肯了」「這是我男友吧🤣」等爆笑回覆，互動率極高。"
-        )
+        preview = self._quote(text, 45)
+
+        punchline = ""
+        lines = [l.strip() for l in text.split("\n") if len(l.strip()) > 5]
+        for l in lines:
+            if "=" in l or "：" in l or ":" in l or "笑" in l:
+                punchline = self._quote(l, 40)
+                break
+
+        parts = [f"【最好笑】{preview}"]
+        if punchline:
+            parts.append(f"【金句】{punchline}")
+        parts.append(f"（{len(posts)} 篇搞笑梗，最高 {top.get('likes',0):,} 讚）")
+        return " ".join(parts)
 
     def _summarize_求助請益(self, posts) -> str:
         top = max(posts, key=lambda x: x.get("likes", 0))
         text = top.get("text", "")
-        preview = text[:60].replace("\n", " ") + "⋯"
-        return (
-            f"多位網友正面臨感情困境，上網尋求建議與支持。"
-            f"最受關注的求助：「{preview}」"
-            f"留言區湧入大量建議，多數傾向支持原PO保護自己、設下明確界線。"
-            f"也有部分聲音建議先冷靜溝通、給予對方解釋機會。"
-        )
+        preview = self._quote(text, 50)
+
+        dilemma = ""
+        lines = [l.strip() for l in text.split("\n") if len(l.strip()) > 8]
+        for l in lines:
+            if "?" in l or "？" in l or "該" in l:
+                dilemma = self._quote(l, 45)
+                break
+
+        parts = [f"【最糾結】{preview}"]
+        if dilemma:
+            parts.append(f"【核心問題】{dilemma}")
+        parts.append(f"（{len(posts)} 篇求助，最高 {top.get('likes',0):,} 讚）")
+        return " ".join(parts)
 
     def _summarize_其他(self, posts) -> str:
-        return (
-            f"這個分類包含 {len(posts)} 則多元主題的討論，涵蓋不同觀點與感受。"
-            f"整體互動熱烈，顯示戀愛話題在 Threads 上具有高度討論價值。"
-        )
+        top = max(posts, key=lambda x: x.get("likes", 0))
+        preview = self._quote(top.get("text", ""), 45)
+        return f"【混合話題】{preview}（{len(posts)} 篇，最高{top.get('likes',0):,}讚）"
 
     def _generic_summary(self, posts) -> str:
-        return (
-            f"共 {len(posts)} 則相關討論，主題多元、互動熱烈，"
-            f"反映在 Threads 社群中具有高度共鳴。"
-        )
+        top = max(posts, key=lambda x: x.get("likes", 0)) if posts else None
+        preview = self._quote(top.get("text", ""), 40) if top else ""
+        return f"【綜合】{preview}（{len(posts)} 篇）"
