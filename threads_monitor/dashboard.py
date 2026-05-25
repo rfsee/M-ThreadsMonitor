@@ -20,115 +20,120 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-LIGHT_THEME = {
-    "bg": "#ffffff",
-    "card_bg": "#f8f9fa",
-    "text": "#1a1a2e",
-    "accent": "#e74c3c",
-    "accent2": "#fd79a8",
-    "border": "#e0e0e0",
-    "success": "#00b894",
-    "warning": "#fdcb6e",
-}
+DARK_HEADER = "#121214"
+CHART_COLORS = ["#f5a0b5", "#e8a87c", "#b8a9c9", "#d4c5a9", "#a8c5c9", "#c9b8a8", "#d4b8c9"]
 
 st.markdown(f"""
 <style>
-    .stApp {{ background-color: {LIGHT_THEME['bg']}; }}
+    .stApp {{ background-color: #ffffff; }}
     .main-header {{
-        font-size: 2.2rem; font-weight: 700;
-        color: {LIGHT_THEME['accent']};
-        padding: 1rem 0; border-bottom: 3px solid {LIGHT_THEME['accent2']};
-        margin-bottom: 1.5rem;
+        background: linear-gradient(135deg, {DARK_HEADER}, #1a1a24);
+        padding: 1.8rem 2rem; margin: -1rem -1rem 1.5rem -1rem;
+        border-bottom: none;
+    }}
+    .main-header h1 {{
+        font-size: 1.6rem; font-weight: 600; color: #f0f0f0; margin: 0;
+        letter-spacing: 0.5px;
+    }}
+    .main-header .meta {{
+        font-size: 0.8rem; color: rgba(255,255,255,0.5); margin-top: 0.3rem;
     }}
     .sub-header {{
-        font-size: 1.3rem; font-weight: 600;
-        color: {LIGHT_THEME['text']};
-        margin: 1rem 0 0.5rem 0;
+        font-size: 1.1rem; font-weight: 600;
+        color: #212529;
+        margin: 1.2rem 0 0.6rem 0;
     }}
     .metric-card {{
-        background: {LIGHT_THEME['card_bg']};
+        background: #ffffff;
         border-radius: 12px; padding: 1rem 1.2rem;
-        border: 1px solid {LIGHT_THEME['border']};
+        border: 1px solid #e9ecef;
         text-align: center;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.04);
     }}
     .metric-value {{
         font-size: 1.8rem; font-weight: 700;
-        color: {LIGHT_THEME['accent']};
+        color: #212529;
     }}
     .metric-label {{
-        font-size: 0.8rem; color: #666;
-        margin-top: 0.2rem;
+        font-size: 0.75rem; color: #868e96;
+        margin-top: 0.25rem;
+        letter-spacing: 0.3px;
+    }}
+    .metric-label .icon {{
+        font-size: 0.85rem; margin-right: 0.2rem;
     }}
     .topic-card {{
         background: white;
         border-radius: 12px; padding: 1.2rem;
-        border: 1px solid {LIGHT_THEME['border']};
+        border: 1px solid #e9ecef;
         margin-bottom: 1rem;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.04);
+        box-shadow: 0 1px 3px rgba(0,0,0,0.04);
     }}
     .topic-title {{
-        font-size: 1.1rem; font-weight: 600;
-        color: {LIGHT_THEME['accent']};
+        font-size: 1rem; font-weight: 600;
+        color: #212529;
         margin-bottom: 0.5rem;
     }}
     .summary-text {{
-        font-size: 0.95rem; line-height: 1.6;
-        color: #444; padding: 0.5rem;
-        background: #fef9f9; border-radius: 8px;
-        border-left: 3px solid {LIGHT_THEME['accent2']};
+        font-size: 0.9rem; line-height: 1.6;
+        color: #495057; padding: 0.6rem 0.8rem;
+        background: #f8f9fa; border-radius: 8px;
+        border-left: 3px solid #f5a0b5;
     }}
     .post-card {{
         background: white;
         border-radius: 10px; padding: 1rem;
-        border: 1px solid {LIGHT_THEME['border']};
+        border: 1px solid #e9ecef;
         margin-bottom: 0.8rem;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.04);
     }}
     .post-author {{
-        font-weight: 600; color: {LIGHT_THEME['text']};
+        font-weight: 600; color: #212529;
     }}
     .post-meta {{
-        font-size: 0.8rem; color: #999;
+        font-size: 0.8rem; color: #868e96;
     }}
     .post-text {{
         font-size: 0.9rem; line-height: 1.5;
-        color: #333; margin: 0.5rem 0;
+        color: #495057; margin: 0.5rem 0;
         white-space: pre-wrap;
     }}
     .post-stats {{
         display: flex; gap: 1rem;
-        font-size: 0.85rem; color: #666;
+        font-size: 0.85rem; color: #868e96;
         margin-top: 0.5rem;
     }}
     .comment-box {{
-        background: #f5f5f5; border-radius: 8px;
+        background: #f8f9fa; border-radius: 8px;
         padding: 0.5rem 0.8rem; margin: 0.3rem 0;
         font-size: 0.85rem;
     }}
     .comment-author {{
-        font-weight: 600; color: {LIGHT_THEME['accent']};
+        font-weight: 600; color: #212529;
         font-size: 0.8rem;
     }}
     .comment-text {{
-        color: #444; margin: 0.2rem 0;
+        color: #495057; margin: 0.2rem 0;
     }}
     .comment-likes {{
-        font-size: 0.75rem; color: #999;
+        font-size: 0.75rem; color: #adb5bd;
     }}
     .footer {{
-        text-align: center; color: #999;
+        text-align: center; color: #adb5bd;
         font-size: 0.8rem; padding: 2rem 0;
-        border-top: 1px solid {LIGHT_THEME['border']};
+        border-top: 1px solid #e9ecef;
         margin-top: 2rem;
     }}
     .stButton button {{
-        background: {LIGHT_THEME['accent']};
+        background: #212529;
         color: white; border-radius: 8px;
         border: none; padding: 0.4rem 1.2rem;
+        font-size: 0.85rem;
     }}
     .stButton button:hover {{
-        background: {LIGHT_THEME['accent2']};
+        background: #495057;
     }}
-    .highlight {{ color: {LIGHT_THEME['accent']}; font-weight: 600; }}
+    .highlight {{ color: #212529; font-weight: 600; }}
 </style>
 """, unsafe_allow_html=True)
 
@@ -198,19 +203,24 @@ def render_topic_bar(data: Dict):
     fig = px.bar(
         df, x="貼文數", y="主題", orientation="h",
         text_auto=True,
-        color="貼文數", color_continuous_scale="Reds_r",
+        color="貼文數", color_continuous_scale=["#f8f0f2", "#f5a0b5", "#e880a0"],
     )
     fig.update_traces(
         textposition="outside",
-        hovertemplate="<b>%{y}</b><br>貼文數: %{x}<extra></extra>",
+        textfont=dict(size=11, color="#495057"),
+        hovertemplate="<b>%{y}</b><br>%{x} 篇<extra></extra>",
+        cliponaxis=False,
     )
     fig.update_layout(
-        height=320, margin=dict(t=0, b=0, l=0, r=0),
-        font=dict(size=12),
-        yaxis=dict(autorange="reversed"),
+        height=300,
+        margin=dict(t=10, b=10, l=0, r=30),
+        font=dict(size=12, color="#495057"),
+        yaxis=dict(autorange="reversed", title=None),
+        xaxis=dict(title=None, showgrid=False, visible=False, fixedrange=True),
         showlegend=False,
         coloraxis_showscale=False,
-        xaxis=dict(dtick=1),
+        plot_bgcolor="rgba(0,0,0,0)",
+        paper_bgcolor="rgba(0,0,0,0)",
     )
     st.plotly_chart(fig, width="stretch")
 
@@ -220,27 +230,34 @@ def render_likes_chart(posts: List[Dict]):
         return
     df = pd.DataFrame(posts)
     df["label"] = df.apply(
-        lambda r: f'{r.get("author","匿名")} | {r.get("text","")[:15].replace(chr(10)," ")}⋯',
+        lambda r: f'{r.get("author","匿名")} {r.get("text","")[:15].replace(chr(10)," ")}⋯',
         axis=1,
     )
     df = df.sort_values("likes")
     fig = px.bar(
         df, x="likes", y="label", orientation="h",
         text_auto=".0s",
-        color="likes", color_continuous_scale="Reds",
+        color="likes", color_continuous_scale=["#f8f0f2", "#f5a0b5", "#e880a0"],
     )
     fig.update_traces(
         textposition="outside",
+        textfont=dict(size=10, color="#495057"),
         hovertemplate="<b>%{y}</b><br>❤️ %{x:,}<extra></extra>",
+        cliponaxis=False,
     )
     fig.update_layout(
         title=None,
-        height=500,
-        xaxis_title="讚數", yaxis_title="",
-        margin=dict(l=0, r=40, t=0, b=0),
-        font=dict(size=10),
+        height=480,
+        xaxis_title=None,
+        yaxis_title=None,
+        margin=dict(l=0, r=60, t=10, b=10),
+        font=dict(size=10, color="#495057"),
         yaxis=dict(autorange="reversed"),
+        xaxis=dict(fixedrange=True),
         showlegend=False,
+        coloraxis_showscale=False,
+        plot_bgcolor="rgba(0,0,0,0)",
+        paper_bgcolor="rgba(0,0,0,0)",
     )
     st.plotly_chart(fig, width="stretch")
 
@@ -258,21 +275,25 @@ def render_timeline_chart(posts: List[Dict]):
     fig.add_trace(go.Scatter(
         x=daily["date_only"], y=daily["貼文數"],
         mode="lines+markers", name="貼文數",
-        line=dict(color="#e74c3c", width=2),
-        marker=dict(size=8, color="#e74c3c"),
+        line=dict(color="#b8a9c9", width=2),
+        marker=dict(size=6, color="#b8a9c9"),
         yaxis="y",
     ))
     fig.add_trace(go.Bar(
         x=daily["date_only"], y=daily["總讚數"],
-        name="總讚數", marker_color="#fd79a8",
-        opacity=0.6, yaxis="y2",
+        name="總讚數", marker_color="#f5a0b5",
+        opacity=0.5, yaxis="y2",
     ))
     fig.update_layout(
-        height=300, margin=dict(t=10, b=0, l=0, r=0),
+        height=280,
+        margin=dict(t=10, b=10, l=0, r=0),
         hovermode="x unified",
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-        yaxis=dict(title="貼文數", side="left"),
-        yaxis2=dict(title="總讚數", side="right", overlaying="y", showgrid=False),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(size=10)),
+        yaxis=dict(title=None, side="left", showgrid=False, color="#adb5bd"),
+        yaxis2=dict(title=None, side="right", overlaying="y", showgrid=False),
+        xaxis=dict(showgrid=False, color="#adb5bd"),
+        plot_bgcolor="rgba(0,0,0,0)",
+        paper_bgcolor="rgba(0,0,0,0)",
     )
     st.plotly_chart(fig, width="stretch")
 
@@ -284,7 +305,7 @@ def render_topic_summaries(data: Dict):
             st.markdown(
                 f'<div class="topic-card">'
                 f'<div class="topic-title">📌 {s["topic"]} '
-                f'<span style="font-weight:400;color:#999;font-size:0.85rem;">'
+                f'<span style="font-weight:400;color:#868e96;font-size:0.85rem;">'
                 f'（{s["post_count"]} 則貼文 · ❤️ {s["total_likes"]:,}）</span>'
                 f'</div>'
                 f'<div class="summary-text">{s["summary"]}</div>'
@@ -325,11 +346,11 @@ def render_post_detail(post: Dict):
     post_url = post.get("url", "")
     url_btn = ""
     if post_url:
-        url_btn = f'<a href="{post_url}" target="_blank" rel="noopener" style="display:inline-block;margin-top:0.5rem;padding:0.3rem 1rem;background:#e74c3c;color:#fff;border-radius:6px;text-decoration:none;font-size:0.85rem;">🔗 前往 Threads 原文</a>'
+        url_btn = f'<a href="{post_url}" target="_blank" rel="noopener" style="display:inline-block;margin-top:0.5rem;padding:0.3rem 1rem;background:#212529;color:#fff;border-radius:6px;text-decoration:none;font-size:0.85rem;">🔗 前往 Threads 原文</a>'
     st.markdown(
         f'<div class="post-card">'
         f'<div class="post-author">👤 {post.get("author", "匿名")} '
-        f'<span style="font-weight:400;color:#999;">@{post.get("handle", "")}</span>'
+        f'<span style="font-weight:400;color:#868e96;">@{post.get("handle", "")}</span>'
         f'<span class="post-meta"> · {post.get("date", "")}</span>'
         f'</div>'
         f'<div class="post-text">{post.get("text", "")}</div>'
@@ -346,7 +367,7 @@ def render_post_detail(post: Dict):
     top_cmts = post.get("top_comments", [])
     if top_cmts:
         st.markdown(
-            f'<div style="font-size:0.9rem;font-weight:600;color:#666;margin:0.5rem 0;">'
+            f'<div style="font-size:0.9rem;font-weight:600;color:#212529;margin:0.5rem 0;">'
             f'💬 熱門留言（前 {len(top_cmts)} 則）</div>',
             unsafe_allow_html=True,
         )
@@ -365,7 +386,9 @@ def main():
     config = Config()
     st.markdown(
         f'<div class="main-header">'
-        f'💕 Threads 戀愛話題熱門貼文監測</div>',
+        f'<h1>💕 Threads 戀愛話題熱門貼文監測</h1>'
+        f'<div class="meta">每日 09:00 自動更新 · 資料來源：Threads.net</div>'
+        f'</div>',
         unsafe_allow_html=True,
     )
 
@@ -386,7 +409,7 @@ def main():
 
     last_update = data.get("generated_at", "未知")
     st.sidebar.markdown(
-        f'<div style="font-size:0.8rem;color:#999;text-align:center;padding:0.5rem;">'
+        f'<div style="font-size:0.8rem;color:#868e96;text-align:center;padding:0.5rem;">'
         f'🕐 最後更新：{last_update}</div>',
         unsafe_allow_html=True,
     )
@@ -422,7 +445,7 @@ def main():
 
     st.sidebar.markdown("---")
     st.sidebar.markdown(
-        f'<div style="font-size:0.8rem;color:#999;">'
+        f'<div style="font-size:0.8rem;color:#868e96;">'
         f'🔍 目前顯示 <span class="highlight">{len(posts)}</span> 則貼文'
         f'</div>',
         unsafe_allow_html=True,
@@ -436,23 +459,26 @@ def main():
         render_metrics(data)
         if punchlines:
             st.markdown('<div class="sub-header">💥 本週爆發金句</div>', unsafe_allow_html=True)
-            cols = st.columns(len(punchlines))
+            cols = st.columns(min(len(punchlines), 3))
             for col, pl in zip(cols, punchlines):
                 with col:
                     st.markdown(
-                        f'<div class="topic-card" style="text-align:center;">'
-                        f'<div style="font-size:1.1rem;font-weight:600;color:#e74c3c;margin-bottom:0.3rem;">「{pl["text"]}」</div>'
-                        f'<div style="font-size:0.8rem;color:#999;">— {pl["source"]} · ❤️ {pl["likes"]:,}</div>'
+                        f'<div style="background:#f8f9fa;border-radius:12px;padding:1.2rem;text-align:center;'
+                        f'box-shadow:0 1px 4px rgba(0,0,0,0.06);">'
+                        f'<div style="font-size:1.05rem;font-weight:600;color:#212529;line-height:1.5;margin-bottom:0.4rem;">'
+                        f'「{pl["text"]}」</div>'
+                        f'<div style="font-size:0.8rem;color:rgba(0,0,0,0.45);">'
+                        f'— {pl["source"]} · ❤️ {pl["likes"]:,}</div>'
                         f'</div>',
                         unsafe_allow_html=True,
                     )
 
         col_left, col_right = st.columns([1.2, 1])
         with col_left:
-            st.markdown('<div class="sub-header">📈 讚數排行（作者 | 貼文前 15 字）</div>', unsafe_allow_html=True)
+            st.markdown('<div class="sub-header">📈 讚數排行</div>', unsafe_allow_html=True)
             render_likes_chart(posts)
         with col_right:
-            st.markdown('<div class="sub-header">🎯 主題分佈（由多到少）</div>', unsafe_allow_html=True)
+            st.markdown('<div class="sub-header">🎯 主題分佈</div>', unsafe_allow_html=True)
             render_topic_bar(data)
             st.markdown('<div class="sub-header">📅 時間趨勢</div>', unsafe_allow_html=True)
             render_timeline_chart(posts)
