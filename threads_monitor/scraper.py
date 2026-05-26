@@ -107,6 +107,21 @@ class ThreadsScraper:
 
         return found
 
+    @staticmethod
+    def _parse_count(text: str) -> int:
+        t = text.strip().replace(",", "")
+        m = re.match(r"(\d+(?:\.\d+)?)\s*[\u842c\u4e07]", t)
+        if m:
+            return int(float(m.group(1)) * 10000)
+        m = re.match(r"(\d+(?:\.\d+)?)\s*[kK]", t)
+        if m:
+            return int(float(m.group(1)) * 1000)
+        t2 = t.replace(" ", "")
+        try:
+            return int(t2)
+        except ValueError:
+            return 0
+
     def _parse_card(self, card_text: str, handle: str, code: str = "") -> Dict:
         lines = [l.strip() for l in card_text.split("\n")]
         if not lines:
@@ -114,32 +129,24 @@ class ThreadsScraper:
 
         # Last lines contain engagement numbers
         num_lines = []
-        content_lines = []
         for line in reversed(lines):
-            clean = line.strip().replace(",", "")
-            if clean.replace(".", "").replace(" ", "").isdigit() and len(clean) < 20:
+            if self._parse_count(line) > 0:
                 num_lines.insert(0, line.strip())
             else:
                 break
-        # Also skip "翻譯" / "Translate" line before numbers
         text_parts = []
         for line in lines:
             stripped = line.strip()
             if stripped in ("翻譯", "Translate") or not stripped:
                 continue
-            if any(stripped.replace(",", "").replace(".", "").replace(" ", "").isdigit() for n in num_lines if stripped == n):
+            if any(stripped.replace(",", "").replace(" ", "") == n.replace(",", "").replace(" ", "")
+                   for n in num_lines if self._parse_count(stripped) > 0):
                 continue
             text_parts.append(stripped)
 
         # Parse numbers
-        likes = 0
-        replies = 0
-        if num_lines:
-            try: likes = int(num_lines[0].replace(",", ""))
-            except ValueError: pass
-        if len(num_lines) > 1:
-            try: replies = int(num_lines[1].replace(",", ""))
-            except ValueError: pass
+        likes = self._parse_count(num_lines[0]) if num_lines else 0
+        replies = self._parse_count(num_lines[1]) if len(num_lines) > 1 else 0
 
         # Check if second line is a display name (not a time pattern)
         author_name = handle
