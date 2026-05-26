@@ -1,14 +1,4 @@
-# Threads 戀愛話題熱門貼文監測工具
 
-[![Streamlit App](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://M-ThreadsMonitor.streamlit.app)
-
-## 功能
-
-- 自動爬取 Threads 上與戀愛相關的熱門貼文
-- 篩選讚數 ≥ 1000 的貼文
-- 主題分類（工具推薦、觀點爭論、案例分享、抱怨、幽默梗、求助請益）
-- 每群自動生成摘要
-- 互動式儀表板
 
 ## 快速啟動（本機）
 
