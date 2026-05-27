@@ -26,8 +26,8 @@ class Config:
         "邊界感", "媽寶", "PUA",
     ])
 
-    min_likes: int = 1000
-    max_posts: int = 20
+    min_likes: int = 100
+    max_posts: int = 50
     search_days: int = 21
     output_file: str = "threads_posts.json"
     analysis_file: str = "threads_analysis.json"

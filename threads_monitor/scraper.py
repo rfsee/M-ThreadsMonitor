@@ -48,23 +48,29 @@ class ThreadsScraper:
             self._browser = None
             self._context = None
 
-    async def _search_keyword(self, keyword: str) -> List[Dict]:
+    async def _search_keyword(self, keyword: str, sort_top: bool = True) -> List[Dict]:
         _safe_print(f"  [搜尋] 關鍵字: {keyword}")
         await self._ensure_browser()
         page = await self._context.new_page()
 
         found = []
         try:
-            await page.goto(
-                f"{self.BASE_URL}/search?q={keyword}",
-                timeout=25000,
-                wait_until="domcontentloaded",
-            )
-            await page.wait_for_timeout(6000)
+            url = f"{self.BASE_URL}/search?q={keyword}"
+            if sort_top:
+                url += "&sort=top"
+            await page.goto(url, timeout=25000, wait_until="domcontentloaded")
+            await page.wait_for_timeout(3000)
+
+            for scroll in range(4):
+                await page.evaluate("window.scrollBy(0, 800)")
+                await page.wait_for_timeout(1500)
+
+            await page.wait_for_timeout(1500)
 
             result = await page.evaluate(r"""
 () => {
     const items = {};
+    const seen = new Set();
     const links = document.querySelectorAll('a[href*="/post/"]');
 
     links.forEach(a => {
@@ -81,6 +87,8 @@ class ThreadsScraper:
             }
         }
         if (!handle || !code || href.includes('/media')) return;
+        if (seen.has(code)) return;
+        seen.add(code);
 
         let card = a;
         for (let i = 0; i < 8 && card; i++) {
@@ -98,6 +106,10 @@ class ThreadsScraper:
             found = json.loads(result)
             if found:
                 _safe_print(f"    取得 {len(found)} 則貼文")
+            elif sort_top:
+                _safe_print(f"    無結果，重試普通排序")
+                await page.close()
+                return await self._search_keyword(keyword, sort_top=False)
 
         except Exception as e:
             _safe_print(f"    [ERROR] {e}")
@@ -213,13 +225,63 @@ class ThreadsScraper:
             _safe_print("[WARN] 自動切換至模擬資料\n")
             return generate_sample_data(self.config.max_posts)
 
+    async def _scrape_feed(self) -> List[Dict]:
+        _safe_print("  [搜尋] 熱門首頁貼文")
+        await self._ensure_browser()
+        page = await self._context.new_page()
+        posts = []
+        try:
+            await page.goto(f"{self.BASE_URL}/", timeout=25000, wait_until="domcontentloaded")
+            await page.wait_for_timeout(3000)
+            for _ in range(5):
+                await page.evaluate("window.scrollBy(0, 800)")
+                await page.wait_for_timeout(2000)
+            raw = await page.evaluate(r"""
+() => {
+    const items = {};
+    const seen = new Set();
+    const links = document.querySelectorAll('a[href*="/post/"]');
+    links.forEach(a => {
+        const href = a.href;
+        const parts = href.split('/');
+        let handle='', code='';
+        for(let i=0;i<parts.length;i++){if(parts[i].startsWith('@')){handle=parts[i].slice(1);if(i+2<parts.length&&parts[i+1]==='post')code=parts[i+2];break;}}
+        if(!handle||!code||href.includes('/media')||seen.has(code))return;
+        seen.add(code);
+        let card=a;for(let i=0;i<8&&card;i++){if((card.innerText||'').length>100)break;card=card.parentElement;}
+        items[code]={handle,code,text:card?card.innerText||'':a.innerText||''};
+    });
+    return JSON.stringify(Object.values(items));
+}
+""")
+            posts = json.loads(raw)
+            _safe_print(f"    取得 {len(posts)} 則貼文")
+        except Exception as e:
+            _safe_print(f"    [ERROR] {e}")
+        finally:
+            await page.close()
+        return posts
+
     async def _scrape_all(self) -> List[Dict]:
         all_posts = []
         seen_urls = set()
         cutoff = datetime.now() - timedelta(days=self.config.search_days)
 
+        # First scrape the main feed for trending posts
+        feed_posts = await self._scrape_feed()
+        for p in feed_posts:
+            url = p.get("url", "")
+            if url and url not in seen_urls:
+                seen_urls.add(url)
+                parsed = self._parse_card(p.get("text", ""), p.get("handle", ""), p.get("code", ""))
+                if parsed.get("text", "").strip():
+                    pd = parsed.pop("_parsed_date", None)
+                    if pd and pd < cutoff:
+                        continue
+                    all_posts.append(parsed)
+
         for i, kw in enumerate(self.config.keywords):
-            if len(all_posts) >= self.config.max_posts * 3:
+            if len(all_posts) >= self.config.max_posts * 5:
                 break
             posts = await self._search_keyword(kw)
             for p in posts:
@@ -234,7 +296,9 @@ class ThreadsScraper:
                         all_posts.append(parsed)
             await asyncio.sleep(1.0)
 
-        all_posts.sort(key=lambda x: x.get("likes", 0), reverse=True)
+        for p in all_posts:
+            p["engagement"] = p.get("likes", 0) + p.get("replies", 0)
+        all_posts.sort(key=lambda x: x.get("engagement", 0), reverse=True)
         return all_posts[: self.config.max_posts]
 
     def _is_low_quality(self, posts: List[Dict]) -> bool:
